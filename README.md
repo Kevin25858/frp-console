@@ -16,6 +16,8 @@
 
 ### 使用 Docker 部署（推荐）
 
+#### 方式一：使用 Docker Compose（本地构建）
+
 ```bash
 # 克隆项目
 git clone <repository-url>
@@ -27,6 +29,25 @@ cp frp-console.conf.example frp-console.conf
 
 # 启动服务
 docker-compose up -d
+
+# 访问 http://localhost:7600
+```
+
+#### 方式二：使用 GitHub Container Registry（推荐）
+
+```bash
+# 拉取最新镜像
+docker pull ghcr.io/kevin25858/frp-console:latest
+
+# 运行容器
+docker run -d --name frp-console -p 7600:7600 \
+  -v /opt/frp-console/data:/app/data \
+  -v /opt/frp-console/clients:/app/clients \
+  -v /opt/frp-console/logs:/app/logs \
+  -e ADMIN_PASSWORD=your_secure_password \
+  -e SECRET_KEY=your_secret_key \
+  --restart unless-stopped \
+  ghcr.io/kevin25858/frp-console:latest
 
 # 访问 http://localhost:7600
 ```
@@ -130,6 +151,15 @@ python app/app.py
 | `SMTP_PASSWORD` | SMTP 密码 | - |
 | `ALERT_TO` | 告警接收邮箱 | - |
 
+### GitHub Container Registry
+
+本项目使用 GitHub Container Registry (ghcr.io) 托管 Docker 镜像：
+
+- **镜像地址**: `ghcr.io/kevin25858/frp-console:latest`
+- **标签格式**: `ghcr.io/kevin25858/frp-console:<commit-sha>`
+
+每次推送到 `main` 分支都会自动构建并推送最新镜像。
+
 ### 配置文件
 
 配置文件位于 `/opt/frp-console/frp-console.conf`：
@@ -161,6 +191,8 @@ frp-console/
 │   │   ├── contexts/      # React Context
 │   │   └── types/         # TypeScript 类型
 │   └── package.json
+├── .github/workflows/     # GitHub Actions CI/CD
+│   └── ci.yml             # CI/CD 配置
 ├── clients/               # 客户端配置文件
 ├── data/                  # 数据库文件
 ├── logs/                  # 日志文件
@@ -177,7 +209,28 @@ frp-console/
 - Session 管理
 - 密码复杂度验证（Zod）
 
-## 📝 API 文档
+## � CI/CD
+
+本项目使用 GitHub Actions 实现自动化构建和部署：
+
+### 工作流说明
+
+| 任务 | 说明 | 触发条件 |
+|------|------|----------|
+| **Backend Tests** | Python 后端测试和代码检查 | Push / PR |
+| **Frontend Tests** | 前端 TypeScript 检查和测试 | Push / PR |
+| **Security Scan** | Trivy 安全漏洞扫描 | Push / PR |
+| **Build** | Docker 镜像构建 | Push / PR |
+| **Deploy** | 推送镜像到 ghcr.io | Push to main |
+
+### 镜像地址
+
+- **最新版本**: `ghcr.io/kevin25858/frp-console:latest`
+- **历史版本**: `ghcr.io/kevin25858/frp-console:<commit-sha>`
+
+查看 [Actions](https://github.com/Kevin25858/frp-console/actions) 页面了解构建状态。
+
+## �📝 API 文档
 
 ### 认证
 
