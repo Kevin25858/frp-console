@@ -13,6 +13,13 @@ RUN npm install
 # 复制前端源代码
 COPY frontend/ ./
 
+# 调试：检查文件是否正确复制
+RUN echo "=== Checking frontend files ===" && \
+    ls -la /app/frontend/src/lib/ && \
+    ls -la /app/frontend/src/pages/ | head -20 && \
+    echo "=== Checking vite.config.ts ===" && \
+    cat /app/frontend/vite.config.ts | head -20
+
 # 构建前端（使用 npx 确保能找到 vite）
 # 注意：确保所有导入路径都包含文件扩展名
 RUN npx vite build
