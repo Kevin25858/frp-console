@@ -1,0 +1,319 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 220 15% 12%;
+    --foreground: 220 15% 90%;
+
+    --card: 220 15% 16%;
+    --card-foreground: 220 15% 90%;
+
+    --popover: 220 15% 16%;
+    --popover-foreground: 220 15% 90%;
+
+    --primary: 210 40% 85%;
+    --primary-foreground: 220 15% 12%;
+
+    --secondary: 220 15% 20%;
+    --secondary-foreground: 220 15% 90%;
+
+    --muted: 220 15% 20%;
+    --muted-foreground: 220 15% 65%;
+
+    --accent: 220 15% 20%;
+    --accent-foreground: 220 15% 90%;
+
+    --destructive: 0 60% 50%;
+    --destructive-foreground: 220 15% 90%;
+
+    --border: 220 15% 22%;
+    --input: 220 15% 22%;
+    --ring: 210 40% 70%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* 动画效果 */
+@layer utilities {
+  /* 淡入动画 */
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  /* 淡入向上动画 */
+  .animate-fade-in-up {
+    animation: fadeInUp 0.3s ease-out;
+  }
+
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* 淡入向下动画 */
+  .animate-fade-in-down {
+    animation: fadeInDown 0.3s ease-out;
+  }
+
+  @keyframes fadeInDown {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* 缩放动画 */
+  .animate-scale-in {
+    animation: scaleIn 0.2s ease-out;
+  }
+
+  @keyframes scaleIn {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  /* 滑入动画 */
+  .animate-slide-in {
+    animation: slideIn 0.3s ease-out;
+  }
+
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateX(-20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  /* 脉冲动画 */
+  .animate-pulse-slow {
+    animation: pulseSlow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes pulseSlow {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.7;
+    }
+  }
+
+  /* 弹跳动画 */
+  .animate-bounce-subtle {
+    animation: bounceSubtle 0.5s ease-in-out;
+  }
+
+  @keyframes bounceSubtle {
+    0%, 100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-3px);
+    }
+  }
+
+  /* 旋转动画 */
+  .animate-spin-slow {
+    animation: spinSlow 1s linear infinite;
+  }
+
+  @keyframes spinSlow {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  /* 摇晃动画 */
+  .animate-shake {
+    animation: shake 0.5s ease-in-out;
+  }
+
+  @keyframes shake {
+    0%, 100% {
+      transform: translateX(0);
+    }
+    10%, 30%, 50%, 70%, 90% {
+      transform: translateX(-2px);
+    }
+    20%, 40%, 60%, 80% {
+      transform: translateX(2px);
+    }
+  }
+}
+
+/* 卡片悬停效果 */
+@layer components {
+  .card-hover {
+    @apply transition-all duration-200 ease-in-out;
+  }
+
+  .card-hover:hover {
+    @apply transform -translate-y-1 shadow-lg;
+  }
+
+  .card-hover:active {
+    @apply transform scale-[0.98];
+  }
+}
+
+/* 按钮悬停效果 */
+@layer components {
+  .btn-hover {
+    @apply transition-all duration-150 ease-in-out;
+  }
+
+  .btn-hover:hover {
+    @apply transform scale-105 shadow-md;
+  }
+
+  .btn-hover:active {
+    @apply transform scale-95;
+  }
+}
+
+/* 表格行动画 */
+@layer utilities {
+  .table-row-enter {
+    animation: tableRowEnter 0.3s ease-out;
+  }
+
+  @keyframes tableRowEnter {
+    from {
+      opacity: 0;
+      transform: translateX(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+}
+
+/* 状态指示器动画 */
+@layer utilities {
+  .status-indicator {
+    @apply relative inline-flex;
+  }
+
+  .status-indicator::before {
+    content: '';
+    @apply absolute -inset-0.5 rounded-full opacity-75 animate-ping;
+  }
+
+  .status-indicator-online::before {
+    @apply bg-green-400;
+  }
+
+  .status-indicator-offline::before {
+    @apply bg-gray-400;
+  }
+
+  .status-indicator-error::before {
+    @apply bg-red-400;
+  }
+}
+
+/* 平滑滚动 */
+@layer base {
+  html {
+    @apply scroll-smooth;
+  }
+}
+
+/* 加载骨架屏动画 */
+@layer utilities {
+  .skeleton-shimmer {
+    @apply animate-pulse;
+    background: linear-gradient(
+      90deg,
+      hsl(var(--muted)) 25%,
+      hsl(var(--muted-foreground) / 0.1) 50%,
+      hsl(var(--muted)) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
+}

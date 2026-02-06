@@ -1,0 +1,61 @@
+# 前端依赖和构建产物
+frontend/node_modules
+frontend/dist
+frontend/.git
+frontend/.env*
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist
+build
+*.log
+.venv
+env
+venv
+ENV
+.eggs
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# 文档
+*.md
+!README.md
+CHANGELOG.md
+AGENTS.md
+PROJECT_STATUS.md
+
+# 其他
+.DS_Store
+*.bak
+*.tmp
+.env
+.env.local
+.env.*.local
+
+# 日志
+logs/*
+!logs/.gitkeep
+
+# 数据
+data/*
+!data/.gitkeep
+
+# 配置示例
+frp-console.conf.example

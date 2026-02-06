@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  frp-console:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: frp-console
+    restart: unless-stopped
+    ports:
+      - "7600:7600"
+    environment:
+      - PORT=7600
+      # 安全提示：ADMIN_PASSWORD 和 SECRET_KEY 必须通过环境变量传入
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - SECRET_KEY=${SECRET_KEY}
+      - SMTP_HOST=${SMTP_HOST:-smtp.qq.com}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - ALERT_TO=${ALERT_TO}
+      - FLASK_ENV=${FLASK_ENV:-production}
+      - FORCE_HTTPS=${FORCE_HTTPS:-false}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}
+    volumes:
+      # 持久化数据目录
+      - ./data:/app/data
+      - ./clients:/app/clients
+      - ./logs:/app/logs
+      - ./frp-console.conf:/app/frp-console.conf
+    networks:
+      - frp-network
+    # 资源限制配置
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:7600/login')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+networks:
+  frp-network:
+    driver: bridge
+
+volumes:
+  frp-data:
+  frp-clients:
+  frp-logs:

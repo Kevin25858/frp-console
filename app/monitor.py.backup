@@ -1,0 +1,353 @@
+#!/usr/bin/env python3
+"""
+FRP Web Multi - 监控数据采集器（HTTP API版）
+通过frpc admin API获取流量和连接数据
+"""
+
+import requests
+import sqlite3
+import time
+import threading
+from datetime import datetime, timedelta
+
+DATABASE = '/opt/frp-web-multi/data/frpc.db'
+
+# 简单的彩色日志工具（避免循环导入）
+class SimpleLogger:
+    COLORS = {
+        'reset': '\033[0m',
+        'green': '\033[92m',
+        'yellow': '\033[93m',
+        'red': '\033[91m',
+        'blue': '\033[94m',
+        'dim': '\033[2m',
+    }
+    
+    @classmethod
+    def log(cls, color, icon, message, prefix=''):
+        ts = datetime.now().strftime('%H:%M:%S')
+        prefix_str = f"[{cls.COLORS['dim']}{prefix}{cls.COLORS['reset']}] " if prefix else ""
+        print(f"{cls.COLORS['dim']}[{ts}]{cls.COLORS['reset']} {cls.COLORS[color]}{icon}{cls.COLORS['reset']} {prefix_str}{message}")
+    
+    @classmethod
+    def info(cls, msg, prefix=''): cls.log('blue', 'ℹ', msg, prefix)
+    @classmethod
+    def success(cls, msg, prefix=''): cls.log('green', '✓', msg, prefix)
+    @classmethod
+    def warning(cls, msg, prefix=''): cls.log('yellow', '⚠', msg, prefix)
+    @classmethod
+    def error(cls, msg, prefix=''): cls.log('red', '✗', msg, prefix)
+
+# 全局状态
+active_websocket_count = 0
+last_websocket_activity = time.time()
+monitor_thread = None
+stop_monitor = False
+
+# 内存缓存
+metrics_cache = {}
+
+# admin接口配置
+ADMIN_USER = 'admin'
+ADMIN_PWD = 'admin'
+
+
+def get_db_connection():
+    """获取数据库连接"""
+    conn = sqlite3.connect(DATABASE)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def get_admin_port(client_id):
+    """根据客户端ID获取admin端口"""
+    # client-1 -> 7401, client-2 -> 7402, etc.
+    return 7400 + client_id
+
+
+def fetch_metrics_from_admin(client_id):
+    """
+    通过frpc admin HTTP API获取指标
+    返回：{
+        'traffic_in': 入站字节,
+        'traffic_out': 出站字节,
+        'connections_active': 活跃连接,
+        'connections_total': 总连接,
+        'status': 状态
+    }
+    """
+    admin_port = get_admin_port(client_id)
+    url = f'http://127.0.0.1:{admin_port}/api/status'
+    
+    try:
+        response = requests.get(url, auth=(ADMIN_USER, ADMIN_PWD), timeout=5)
+        
+        if response.status_code != 200:
+            return None
+            
+        data = response.json()
+        
+        # 解析响应数据 - 支持多种代理类型 (tcp, udp, http, etc.)
+        proxies = []
+        for proxy_list in data.values():
+            if isinstance(proxy_list, list):
+                proxies.extend(proxy_list)
+        
+        if not proxies:
+            # 没有代理数据，返回空统计
+            return {
+                'traffic_in': 0,
+                'traffic_out': 0,
+                'connections_active': 0,
+                'connections_total': 0,
+                'status': 'stopped'
+            }
+            
+        # 汇总所有proxy的数据
+        total_in = 0
+        total_out = 0
+        total_active = 0
+        total_connections = 0
+        
+        for proxy in proxies:
+            today = proxy.get('today_traffic_in', 0)
+            total_in += today
+            today_out = proxy.get('today_traffic_out', 0)
+            total_out += today_out
+            
+            cur_conns = proxy.get('cur_conns', 0)
+            total_active += cur_conns
+            
+            # 从历史记录获取总连接数
+            # 如果API不提供，使用当前连接数作为近似
+            total_connections += cur_conns
+            
+        return {
+            'traffic_in': total_in,
+            'traffic_out': total_out,
+            'connections_active': total_active,
+            'connections_total': total_connections,
+            'status': 'running' if total_active > 0 else 'idle'
+        }
+        
+    except requests.exceptions.ConnectionError:
+        # 连接失败，说明frpc未运行或admin接口未启用
+        return {
+            'traffic_in': 0,
+            'traffic_out': 0,
+            'connections_active': 0,
+            'connections_total': 0,
+            'status': 'stopped'
+        }
+    except Exception as e:
+        SimpleLogger.error(f"获取客户端{client_id}数据失败: {e}", 'Monitor')
+        return None
+
+
+def get_collection_interval():
+    """获取采集间隔（秒）"""
+    global active_websocket_count, last_websocket_activity
+    
+    if active_websocket_count > 0:
+        return 1
+        
+    if time.time() - last_websocket_activity < 60:
+        return 5
+        
+    return 30
+
+
+def update_websocket_status(count):
+    """更新WebSocket连接状态"""
+    global active_websocket_count, last_websocket_activity
+    active_websocket_count = count
+    if count > 0:
+        last_websocket_activity = time.time()
+
+
+def collect_and_store_data():
+    """采集所有客户端数据并存储"""
+    global metrics_cache
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # 获取所有启用的客户端
+    cursor.execute('SELECT id, name, config_path FROM clients WHERE enabled = 1')
+    clients = cursor.fetchall()
+    
+    current_time = datetime.now()
+    
+    for client in clients:
+        client_id = client['id']
+        
+        # 通过admin API获取数据
+        data = fetch_metrics_from_admin(client_id)
+        
+        if data:
+            # 计算速率
+            prev_data = metrics_cache.get(client_id)
+            if prev_data:
+                time_diff = (current_time - prev_data['timestamp']).total_seconds()
+                if time_diff > 0:
+                    rate_in = max(0, int((data['traffic_in'] - prev_data['traffic_in']) / time_diff))
+                    rate_out = max(0, int((data['traffic_out'] - prev_data['traffic_out']) / time_diff))
+                else:
+                    rate_in = 0
+                    rate_out = 0
+            else:
+                rate_in = 0
+                rate_out = 0
+            
+            # 存储到数据库
+            cursor.execute('''
+                INSERT INTO traffic_stats 
+                (client_id, timestamp, traffic_in, traffic_out, connections_active, connections_total, rate_in, rate_out)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                client_id,
+                current_time,
+                data['traffic_in'],
+                data['traffic_out'],
+                data['connections_active'],
+                data['connections_total'],
+                rate_in,
+                rate_out
+            ))
+            
+            # 更新缓存
+            metrics_cache[client_id] = {
+                **data,
+                'timestamp': current_time,
+                'rate_in': rate_in,
+                'rate_out': rate_out
+            }
+            
+            # 更新客户端状态
+            cursor.execute('''
+                UPDATE clients 
+                SET status = ?
+                WHERE id = ?
+            ''', (
+                data['status'],
+                client_id
+            ))
+    
+    conn.commit()
+    conn.close()
+
+
+def cleanup_old_data():
+    """清理7天前的数据"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    seven_days_ago = datetime.now() - timedelta(days=7)
+    
+    cursor.execute('''
+        DELETE FROM traffic_stats 
+        WHERE timestamp < ?
+    ''', (seven_days_ago,))
+    
+    deleted = cursor.rowcount
+    conn.commit()
+    conn.close()
+    
+    if deleted > 0:
+        SimpleLogger.info(f"清理了 {deleted} 条7天前的历史数据", 'Monitor')
+
+
+def monitor_loop():
+    """监控主循环"""
+    global stop_monitor
+    
+    cleanup_counter = 0
+    
+    while not stop_monitor:
+        try:
+            collect_and_store_data()
+            
+            cleanup_counter += 1
+            if cleanup_counter >= 60:
+                cleanup_old_data()
+                cleanup_counter = 0
+                
+        except Exception as e:
+            SimpleLogger.error(f"采集出错: {e}", 'Monitor')
+            
+        sleep_time = get_collection_interval()
+        time.sleep(sleep_time)
+
+
+def start_monitor():
+    """启动监控线程"""
+    global monitor_thread, stop_monitor
+    
+    if monitor_thread and monitor_thread.is_alive():
+        return
+        
+    stop_monitor = False
+    monitor_thread = threading.Thread(target=monitor_loop, daemon=True)
+    monitor_thread.start()
+    SimpleLogger.success("数据采集器已启动 (HTTP API模式)", 'Monitor')
+
+
+def stop_monitor_thread():
+    """停止监控线程"""
+    global stop_monitor
+    stop_monitor = True
+    if monitor_thread:
+        monitor_thread.join(timeout=5)
+
+
+def get_latest_metrics(client_id=None):
+    """获取最新指标数据"""
+    if client_id:
+        return metrics_cache.get(client_id)
+    return metrics_cache
+
+
+def get_metrics_history(client_id, hours=1):
+    """获取历史数据 - 修复版"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    since = datetime.now() - timedelta(hours=hours)
+    
+    cursor.execute('''
+        SELECT 
+            timestamp,
+            traffic_in,
+            traffic_out,
+            connections_active,
+            rate_in,
+            rate_out
+        FROM traffic_stats
+        WHERE client_id = ? AND timestamp > ?
+        ORDER BY timestamp ASC
+    ''', (client_id, since))
+    
+    rows = cursor.fetchall()
+    conn.close()
+    
+    # 修复：将 datetime 对象转换为 ISO 格式字符串
+    result = []
+    for row in rows:
+        result.append({
+            "timestamp": row["timestamp"].isoformat() if hasattr(row["timestamp"], "isoformat") else row["timestamp"],
+            "traffic_in": row["traffic_in"],
+            "traffic_out": row["traffic_out"],
+            "connections_active": row["connections_active"],
+            "rate_in": row["rate_in"],
+            "rate_out": row["rate_out"]
+        })
+    
+    return result
+
+
+if __name__ == '__main__':
+    SimpleLogger.info("测试监控采集器...", 'Test')
+    start_monitor()
+    time.sleep(5)
+    SimpleLogger.info(f"缓存数据: {metrics_cache}", 'Test')
+    stop_monitor_thread()
