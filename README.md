@@ -1,16 +1,41 @@
 # FRP Console
 
-现代化的 FRPC 客户端管理控制台，提供 Web UI 来管理多个 FRPC 客户端。
+> 一站式 FRPC 多客户端管理平台
 
-## ✨ 特性
+告别繁琐的命令行配置，通过 Web UI 统一管理多个 FRPC 客户端，
+实现可视化配置、批量管理、自动运维和实时监控。
 
-- **现代化 UI**：基于 React 18 + TypeScript + shadcn/ui 构建的美观界面
-- **双主题支持**：支持亮色/暗色主题切换
-- **实时监控**：实时查看客户端状态和日志
-- **自动重启**：智能健康检查和自动恢复机制
-- **告警通知**：邮件告警支持
-- **模块化架构**：清晰的后端架构，易于维护和扩展
-- **容器化部署**：支持 Docker 部署
+## 🎯 为什么选择 FRP Console？
+
+| 传统方式 | FRP Console |
+|---------|-------------|
+| 手动编辑 frpc.toml | 可视化表单配置 |
+| 逐个启动客户端 | 一键批量管理 |
+| 查看日志需登录服务器 | Web 端实时查看 |
+| 故障无法及时感知 | 自动告警通知 |
+| 配置分散难维护 | 集中式管理 |
+
+## ✨ 核心特性
+
+### 🖥️ 可视化配置管理
+- 表单化配置，无需记忆参数
+- 支持配置导入/导出
+- 多客户端集中管理
+
+### 🚀 自动化运维
+- 客户端自动启动/重启
+- 智能健康检查
+- 故障自动恢复
+
+### 📊 实时监控
+- 在线状态监控
+- 实时日志查看
+- 流量统计概览
+
+### 🔔 智能告警
+- 离线告警
+- 邮件通知
+- 告警历史记录
 
 ## 🚀 快速开始
 
@@ -32,62 +57,6 @@ docker run -d --name frp-console -p 7600:7600 \
 
 # 访问 http://localhost:7600
 ```
-
-### 本地开发
-
-#### 环境要求
-
-- Python 3.12+
-- Node.js 20+
-- npm 或 yarn
-
-#### 安装依赖
-
-```bash
-# 安装后端依赖
-pip install -r requirements.txt
-
-# 安装前端依赖
-cd frontend
-npm install
-```
-
-#### 配置
-
-```bash
-# 设置环境变量
-export ADMIN_PASSWORD=your_password
-export SECRET_KEY=your_secret_key
-```
-
-#### 运行
-
-**开发模式：**
-
-```bash
-# Terminal 1: 启动后端
-cd /opt/frp-console
-python app/app.py
-
-# Terminal 2: 启动前端开发服务器
-cd frontend
-npm run dev
-```
-
-**生产模式：**
-
-```bash
-# 构建前端
-cd frontend
-npm run build
-
-# 启动后端
-cd /opt/frp-console
-export ADMIN_PASSWORD=your_password
-python app/app.py
-```
-
-访问 http://localhost:7600
 
 ## 📖 功能说明
 
@@ -190,7 +159,7 @@ frp-console/
 - Session 管理
 - 密码复杂度验证（Zod）
 
-## � CI/CD
+## 🔄 CI/CD
 
 本项目使用 GitHub Actions 实现自动化构建和部署：
 
@@ -211,7 +180,7 @@ frp-console/
 
 查看 [Actions](https://github.com/Kevin25858/frp-console/actions) 页面了解构建状态。
 
-## �� API 文档
+## 📝 API 文档
 
 ### 认证
 
