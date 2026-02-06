@@ -3,13 +3,11 @@ FROM node:20-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
-# 设置环境变量
-ENV NODE_ENV=production
-
 # 复制前端依赖文件
 COPY frontend/package*.json ./
 
-# 安装前端依赖
+# 安装前端依赖（包括 devDependencies）
+# 注意：不要设置 NODE_ENV=production，否则不会安装 devDependencies
 RUN npm install
 
 # 复制前端源代码
