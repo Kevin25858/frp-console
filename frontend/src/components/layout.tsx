@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ModeToggle } from "./mode-toggle";
-import { LanguageToggle } from "./language-toggle";
+import { ModeToggle } from "./mode-toggle.tsx";
+import { LanguageToggle } from "./language-toggle.tsx";
 import { NavLink } from "react-router-dom";
 import { Menu, X, LogOut, Users } from "lucide-react";
 import { Button } from "@/components/ui/button.tsx";

@@ -1,6 +1,6 @@
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '@/contexts/auth-context.tsx';
-import { Layout } from './layout';
+import { Layout } from './layout.tsx';
 
 export function ProtectedRoute({ children }: { children?: React.ReactNode }) {
     const { isAuthenticated, isLoading } = useAuth();

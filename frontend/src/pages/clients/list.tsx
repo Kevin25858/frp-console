@@ -3,10 +3,10 @@ import { useTranslation } from "react-i18next";
 import { useApi } from "@/hooks/useApi.ts";
 import { apiFetch } from "@/lib/api.ts";
 import { useToast } from "@/contexts/toast-context.tsx";
-import { AddClientDialog } from "./add-client-dialog";
-import { ViewLogsDialog } from "./view-logs-dialog";
-import { ViewConfigDialog } from "./view-config-dialog";
-import { EditClientDialog } from "./edit-client-dialog";
+import { AddClientDialog } from "./add-client-dialog.tsx";
+import { ViewLogsDialog } from "./view-logs-dialog.tsx";
+import { ViewConfigDialog } from "./view-config-dialog.tsx";
+import { EditClientDialog } from "./edit-client-dialog.tsx";
 import { Input } from "@/components/ui/input.tsx";
 import {
     Table,
