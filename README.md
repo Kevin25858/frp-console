@@ -176,7 +176,6 @@ frp-console/
 ### 镜像地址
 
 - **最新版本**: `ghcr.io/kevin25858/frp-console:latest`
-- **历史版本**: `ghcr.io/kevin25858/frp-console:abc1234`
 
 查看 [Actions](https://github.com/Kevin25858/frp-console/actions) 页面了解构建状态。
 
