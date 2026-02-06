@@ -223,7 +223,8 @@ jobs:
 
     - name: Deploy to server
       uses: appleboy/ssh-action@v1
-      if: secrets.DEPLOY_HOST != ''
+      # 使用 continue-on-error 替代 if 条件，避免 secrets 无法识别的问题
+      continue-on-error: true
       with:
         host: ${{ secrets.DEPLOY_HOST }}
         username: ${{ secrets.DEPLOY_USER }}
