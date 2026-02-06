@@ -14,6 +14,7 @@ RUN npm install
 COPY frontend/ ./
 
 # 构建前端（使用 npx 确保能找到 vite）
+# 注意：确保所有导入路径都包含文件扩展名
 RUN npx vite build
 
 # Python 后端阶段
