@@ -15,8 +15,8 @@ RUN npm install
 # 复制前端源代码
 COPY frontend/ ./
 
-# 构建前端
-RUN npm run build
+# 构建前端（使用 npx 确保能找到 vite）
+RUN npx vite build
 
 # Python 后端阶段
 FROM python:3.12-slim
