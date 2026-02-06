@@ -218,8 +218,8 @@ jobs:
         context: .
         push: true
         tags: |
-          ghcr.io/${{ github.repository_owner }}/frp-console:latest
-          ghcr.io/${{ github.repository_owner }}/frp-console:${{ github.sha }}
+          ghcr.io/kevin25858/frp-console:latest
+          ghcr.io/kevin25858/frp-console:${{ github.sha }}
 
     - name: Deploy to server
       uses: appleboy/ssh-action@v1
@@ -230,7 +230,7 @@ jobs:
         username: ${{ secrets.DEPLOY_USER }}
         key: ${{ secrets.DEPLOY_SSH_KEY }}
         script: |
-          docker pull ghcr.io/${{ github.repository_owner }}/frp-console:latest
+          docker pull ghcr.io/kevin25858/frp-console:latest
           docker stop frp-console || true
           docker rm frp-console || true
           docker run -d --name frp-console -p 7600:7600 \
@@ -238,4 +238,4 @@ jobs:
             -v /opt/frp-console/clients:/app/clients \
             -v /opt/frp-console/logs:/app/logs \
             --restart unless-stopped \
-            ghcr.io/${{ github.repository_owner }}/frp-console:latest
+            ghcr.io/kevin25858/frp-console:latest
