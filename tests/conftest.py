@@ -51,17 +51,37 @@ def test_database(tmp_path):
 @pytest.fixture
 def test_app():
     """测试 Flask 应用 fixture"""
+    import sys
+    import os
+    
+    # 确保 app 目录在路径中
+    app_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../app'))
+    if app_dir not in sys.path:
+        sys.path.insert(0, app_dir)
+    
     from app.app import create_app
-    app = create_app(testing=True)
-    app.config['TESTING'] = True
-    
-    # 设置测试环境专用管理员账户
     from app.config import Config
-    Config.ADMIN_USER = 'test_admin'
-    Config.PASSWORD_SALT = 'test_salt'
-    Config.ADMIN_PASSWORD = 'test_hashed_password'
     
-    yield app
+    # 保存原始配置
+    original_user = Config.ADMIN_USER
+    original_salt = Config.PASSWORD_SALT
+    original_password = Config.ADMIN_PASSWORD
+    
+    try:
+        app = create_app(testing=True)
+        app.config['TESTING'] = True
+        
+        # 设置测试环境专用管理员账户
+        Config.ADMIN_USER = 'test_admin'
+        Config.PASSWORD_SALT = 'test_salt'
+        Config.ADMIN_PASSWORD = 'test_hashed_password'
+        
+        yield app
+    finally:
+        # 恢复原始配置
+        Config.ADMIN_USER = original_user
+        Config.PASSWORD_SALT = original_salt
+        Config.ADMIN_PASSWORD = original_password
 
 
 @pytest.fixture
