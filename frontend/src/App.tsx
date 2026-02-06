@@ -1,17 +1,17 @@
 import { createBrowserRouter, RouterProvider, Navigate } from "react-router-dom";
-import DashboardPage from "@/pages/dashboard";
-import ClientListPage from "@/pages/clients/list";
-import AlertsPage from "@/pages/alerts";
-import LoginPage from "@/pages/login";
-import SettingsPage from "@/pages/settings";
-import AuditLogsPage from "@/pages/audit-logs";
-import UsersPage from "@/pages/users";
-import NotFoundPage from "@/pages/not-found";
-import { ProtectedRoute } from "@/components/protected-route";
-import { ToastProvider } from "@/contexts/toast-context";
-import { AuthProvider } from "@/contexts/auth-context";
-import { Toaster } from "@/components/toaster";
-import { ErrorBoundary, PageErrorBoundary } from "@/components/error-boundary";
+import DashboardPage from "@/pages/dashboard.tsx";
+import ClientListPage from "@/pages/clients/list.tsx";
+import AlertsPage from "@/pages/alerts.tsx";
+import LoginPage from "@/pages/login.tsx";
+import SettingsPage from "@/pages/settings.tsx";
+import AuditLogsPage from "@/pages/audit-logs.tsx";
+import UsersPage from "@/pages/users.tsx";
+import NotFoundPage from "@/pages/not-found.tsx";
+import { ProtectedRoute } from "@/components/protected-route.tsx";
+import { ToastProvider } from "@/contexts/toast-context.tsx";
+import { AuthProvider } from "@/contexts/auth-context.tsx";
+import { Toaster } from "@/components/toaster.tsx";
+import { ErrorBoundary, PageErrorBoundary } from "@/components/error-boundary.tsx";
 
 const router = createBrowserRouter([
   {

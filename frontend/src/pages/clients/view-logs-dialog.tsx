@@ -1,14 +1,14 @@
 import { useState, useEffect, useRef, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { useApi } from "@/hooks/useApi";
-import { Button } from "@/components/ui/button";
+import { useApi } from "@/hooks/useApi.ts";
+import { Button } from "@/components/ui/button.tsx";
 import {
     Dialog,
     DialogContent,
     DialogHeader,
     DialogTitle,
     DialogTrigger,
-} from "@/components/ui/dialog";
+} from "@/components/ui/dialog.tsx";
 
 interface ViewLogsDialogProps {
     clientId: number;

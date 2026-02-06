@@ -1,8 +1,8 @@
 import { useState, useEffect, ReactNode } from "react";
-import { useApi } from "@/hooks/useApi";
-import { apiFetch } from "@/lib/api";
-import { useToast } from "@/contexts/toast-context";
-import { Button } from "@/components/ui/button";
+import { useApi } from "@/hooks/useApi.ts";
+import { apiFetch } from "@/lib/api.ts";
+import { useToast } from "@/contexts/toast-context.tsx";
+import { Button } from "@/components/ui/button.tsx";
 import {
     Dialog,
     DialogContent,
@@ -11,8 +11,8 @@ import {
     DialogHeader,
     DialogTitle,
     DialogTrigger,
-} from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
+} from "@/components/ui/dialog.tsx";
+import { Textarea } from "@/components/ui/textarea.tsx";
 import { Edit3 } from "lucide-react";
 
 interface EditConfigDialogProps {

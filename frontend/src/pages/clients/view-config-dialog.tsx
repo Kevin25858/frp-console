@@ -1,16 +1,16 @@
 import { useState, useEffect, ReactNode, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { useApi } from "@/hooks/useApi";
-import { apiFetch } from "@/lib/api";
-import { useToast } from "@/contexts/toast-context";
-import { Button } from "@/components/ui/button";
+import { useApi } from "@/hooks/useApi.ts";
+import { apiFetch } from "@/lib/api.ts";
+import { useToast } from "@/contexts/toast-context.tsx";
+import { Button } from "@/components/ui/button.tsx";
 import {
     Dialog,
     DialogContent,
     DialogHeader,
     DialogTitle,
     DialogTrigger,
-} from "@/components/ui/dialog";
+} from "@/components/ui/dialog.tsx";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -20,7 +20,7 @@ import {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+} from "@/components/ui/alert-dialog.tsx";
 import { FileText, Copy, RotateCcw, Save, Check, Undo, Redo } from "lucide-react";
 
 interface ViewConfigDialogProps {

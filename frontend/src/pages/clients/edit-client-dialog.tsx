@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { apiFetch } from "@/lib/api";
-import { useToast } from "@/contexts/toast-context";
-import { Button } from "@/components/ui/button";
+import { apiFetch } from "@/lib/api.ts";
+import { useToast } from "@/contexts/toast-context.tsx";
+import { Button } from "@/components/ui/button.tsx";
 import {
     Dialog,
     DialogContent,
@@ -11,10 +11,10 @@ import {
     DialogHeader,
     DialogTitle,
     DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
+} from "@/components/ui/dialog.tsx";
+import { Input } from "@/components/ui/input.tsx";
+import { Label } from "@/components/ui/label.tsx";
+import { Checkbox } from "@/components/ui/checkbox.tsx";
 import { type CheckedState } from "@radix-ui/react-checkbox";
 import type { Client } from "@/types";
 

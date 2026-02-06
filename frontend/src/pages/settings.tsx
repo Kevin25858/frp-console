@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
-import { apiFetch } from "@/lib/api";
-import { useToast } from "@/contexts/toast-context";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { changePasswordSchema, type ChangePasswordFormData } from "@/lib/validations";
+import { apiFetch } from "@/lib/api.ts";
+import { useToast } from "@/contexts/toast-context.tsx";
+import { Button } from "@/components/ui/button.tsx";
+import { Input } from "@/components/ui/input.tsx";
+import { Label } from "@/components/ui/label.tsx";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card.tsx";
+import { changePasswordSchema, type ChangePasswordFormData } from "@/lib/validations.ts";
 
 export default function SettingsPage() {
     const { t } = useTranslation();

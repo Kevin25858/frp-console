@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { Navigate, useNavigate, useRouteError, isRouteErrorResponse } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { useAuth } from "@/contexts/auth-context";
-import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/auth-context.tsx";
+import { Button } from "@/components/ui/button.tsx";
 import { Home, ArrowLeft, AlertCircle } from "lucide-react";
 
 export default function NotFoundPage() {

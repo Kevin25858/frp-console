@@ -1,8 +1,8 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { useApi } from "@/hooks/useApi";
-import { apiFetch } from "@/lib/api";
-import { useToast } from "@/contexts/toast-context";
+import { useApi } from "@/hooks/useApi.ts";
+import { apiFetch } from "@/lib/api.ts";
+import { useToast } from "@/contexts/toast-context.tsx";
 
 import {
     Card,
@@ -10,9 +10,9 @@ import {
     CardHeader,
     CardTitle,
     CardDescription,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+} from "@/components/ui/card.tsx";
+import { Button } from "@/components/ui/button.tsx";
+import { Badge } from "@/components/ui/badge.tsx";
 import {
     Globe,
     Server,

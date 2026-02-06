@@ -1,5 +1,5 @@
 import { Navigate, Outlet } from 'react-router-dom';
-import { useAuth } from '@/contexts/auth-context';
+import { useAuth } from '@/contexts/auth-context.tsx';
 import { Layout } from './layout';
 
 export function ProtectedRoute({ children }: { children?: React.ReactNode }) {

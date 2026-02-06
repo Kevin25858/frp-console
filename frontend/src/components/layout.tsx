@@ -4,8 +4,8 @@ import { ModeToggle } from "./mode-toggle";
 import { LanguageToggle } from "./language-toggle";
 import { NavLink } from "react-router-dom";
 import { Menu, X, LogOut, Users } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { useAuth } from "@/contexts/auth-context";
+import { Button } from "@/components/ui/button.tsx";
+import { useAuth } from "@/contexts/auth-context.tsx";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);

@@ -1,13 +1,13 @@
 import { useState, useMemo, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { useApi } from "@/hooks/useApi";
-import { apiFetch } from "@/lib/api";
-import { useToast } from "@/contexts/toast-context";
+import { useApi } from "@/hooks/useApi.ts";
+import { apiFetch } from "@/lib/api.ts";
+import { useToast } from "@/contexts/toast-context.tsx";
 import { AddClientDialog } from "./add-client-dialog";
 import { ViewLogsDialog } from "./view-logs-dialog";
 import { ViewConfigDialog } from "./view-config-dialog";
 import { EditClientDialog } from "./edit-client-dialog";
-import { Input } from "@/components/ui/input";
+import { Input } from "@/components/ui/input.tsx";
 import {
     Table,
     TableBody,
@@ -15,10 +15,10 @@ import {
     TableHead,
     TableHeader,
     TableRow,
-} from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+} from "@/components/ui/table.tsx";
+import { Button } from "@/components/ui/button.tsx";
+import { Badge } from "@/components/ui/badge.tsx";
+import { Card, CardContent } from "@/components/ui/card.tsx";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -29,9 +29,9 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
     AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+} from "@/components/ui/alert-dialog.tsx";
 import { Play, Square, RotateCcw, FileText, Edit3, ScrollText, Trash2 } from "lucide-react";
-import { Switch } from "@/components/ui/switch";
+import { Switch } from "@/components/ui/switch.tsx";
 import type { Client } from "@/types";
 
 export default function ClientListPage() {

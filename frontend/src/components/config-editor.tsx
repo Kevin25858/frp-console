@@ -3,9 +3,9 @@
  * 提供配置文件的查看和编辑功能
  */
 import React, { useState, useEffect } from 'react';
-import { apiFetch } from '@/lib/api';
-import { useToast } from '@/contexts/toast-context';
-import { Button } from '@/components/ui/button';
+import { apiFetch } from '@/lib/api.ts';
+import { useToast } from '@/contexts/toast-context.tsx';
+import { Button } from '@/components/ui/button.tsx';
 import {
     Dialog,
     DialogContent,
@@ -14,7 +14,7 @@ import {
     DialogHeader,
     DialogTitle,
     DialogTrigger,
-} from '@/components/ui/dialog';
+} from '@/components/ui/dialog.tsx';
 import { FileCode, Save, Download } from 'lucide-react';
 
 interface ConfigEditorProps {
