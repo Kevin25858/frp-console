@@ -16,25 +16,6 @@
 
 ### 使用 Docker 部署（推荐）
 
-#### 方式一：使用 Docker Compose（本地构建）
-
-```bash
-# 克隆项目
-git clone <repository-url>
-cd frp-console
-
-# 配置环境变量（可选）
-cp frp-console.conf.example frp-console.conf
-# 编辑 frp-console.conf 设置你的配置
-
-# 启动服务
-docker-compose up -d
-
-# 访问 http://localhost:7600
-```
-
-#### 方式二：使用 GitHub Container Registry（推荐）
-
 ```bash
 # 拉取最新镜像
 docker pull ghcr.io/kevin25858/frp-console:latest
@@ -230,7 +211,7 @@ frp-console/
 
 查看 [Actions](https://github.com/Kevin25858/frp-console/actions) 页面了解构建状态。
 
-## �📝 API 文档
+## �� API 文档
 
 ### 认证
 
