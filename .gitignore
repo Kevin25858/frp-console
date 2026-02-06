@@ -14,7 +14,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+# 只排除根目录的 lib/，保留 frontend/src/lib/
+/lib/
 lib64/
 parts/
 sdist/
