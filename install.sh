@@ -36,10 +36,10 @@ download_from_mirrors() {
     local filename=$1
     local output=$2
     
-    # 镜像源列表
+    # 镜像源列表（jsDelivr 最快，放第一个）
     local mirrors=(
-        "https://raw.githubusercontent.com/Kevin25858/frp-console/main/$filename"
         "https://cdn.jsdelivr.net/gh/Kevin25858/frp-console@main/$filename"
+        "https://raw.githubusercontent.com/Kevin25858/frp-console/main/$filename"
         "https://ghproxy.com/https://raw.githubusercontent.com/Kevin25858/frp-console/main/$filename"
         "https://mirror.ghproxy.com/https://raw.githubusercontent.com/Kevin25858/frp-console/main/$filename"
         "https://hub.gitmirror.com/https://raw.githubusercontent.com/Kevin25858/frp-console/main/$filename"
