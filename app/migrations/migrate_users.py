@@ -22,9 +22,12 @@ def migrate_admin_to_users():
         # 检查是否已有用户数据
         c.execute('SELECT COUNT(*) FROM users')
         count = c.fetchone()[0]
+        ColorLogger.info(f'用户表当前记录数: {count}', 'Migration')
 
         # 如果环境变量设置了 ADMIN_PASSWORD，强制更新密码
         env_password = os.environ.get('ADMIN_PASSWORD')
+        ColorLogger.info(f'环境变量 ADMIN_PASSWORD: {"已设置" if env_password else "未设置"}', 'Migration')
+
         if env_password and count > 0:
             from utils.password import hash_password
             password_salt, password_hash = hash_password(env_password)
