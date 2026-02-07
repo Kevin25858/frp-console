@@ -26,6 +26,7 @@ WORKDIR /app
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     wget \
+    procps \
     && rm -rf /var/lib/apt/lists/*
 
 # 复制 Python 依赖文件
