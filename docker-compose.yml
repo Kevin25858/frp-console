@@ -12,10 +12,10 @@ services:
     environment:
       - PORT=7600
       # 安全提示：ADMIN_PASSWORD 和 SECRET_KEY 必须通过环境变量传入
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
-      - SECRET_KEY=${SECRET_KEY}
+      - ADMIN_PASSWORD=your_password
+      - SECRET_KEY=your_secret_key
       # API Token 用于 frpc 拉取配置
-      - API_TOKEN=${API_TOKEN}
+      - API_TOKEN=your_api_token
       - SMTP_HOST=${SMTP_HOST:-smtp.qq.com}
       - SMTP_PORT=${SMTP_PORT:-587}
       - SMTP_USER=${SMTP_USER}

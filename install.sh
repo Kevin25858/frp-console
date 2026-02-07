@@ -20,14 +20,21 @@ FRP_VERSION="0.52.3"
 ADMIN_PASSWORD=""
 API_TOKEN=""
 
-# 下载函数（带镜像源切换）
-download_with_mirror() {
+# 下载函数（带重试和镜像源）
+download_with_retry() {
     local url=$1
     local output=$2
+    local max_retries=3
+    local retry_count=0
     
-    if curl -fsSL --connect-timeout 10 --max-time 60 "$url" -o "$output" 2>/dev/null; then
-        return 0
-    fi
+    while [ $retry_count -lt $max_retries ]; do
+        if curl -fsSL --connect-timeout 30 --max-time 120 "$url" -o "$output" 2>/dev/null; then
+            return 0
+        fi
+        retry_count=$((retry_count + 1))
+        warn "下载失败，第 $retry_count 次重试..."
+        sleep 2
+    done
     return 1
 }
 
@@ -36,20 +43,17 @@ download_from_mirrors() {
     local filename=$1
     local output=$2
     
-    # 镜像源列表（jsDelivr 最快，放第一个）
+    # 镜像源列表
     local mirrors=(
-        "https://cdn.jsdelivr.net/gh/Kevin25858/frp-console@main/$filename"
         "https://raw.githubusercontent.com/Kevin25858/frp-console/main/$filename"
+        "https://cdn.jsdelivr.net/gh/Kevin25858/frp-console@main/$filename"
         "https://ghproxy.com/https://raw.githubusercontent.com/Kevin25858/frp-console/main/$filename"
         "https://mirror.ghproxy.com/https://raw.githubusercontent.com/Kevin25858/frp-console/main/$filename"
-        "https://hub.gitmirror.com/https://raw.githubusercontent.com/Kevin25858/frp-console/main/$filename"
-        "https://ghps.cc/https://raw.githubusercontent.com/Kevin25858/frp-console/main/$filename"
-        "https://gh.api.99988866.xyz/https://raw.githubusercontent.com/Kevin25858/frp-console/main/$filename"
     )
     
     for mirror in "${mirrors[@]}"; do
         info "尝试从 $mirror 下载..."
-        if download_with_mirror "$mirror" "$output"; then
+        if download_with_retry "$mirror" "$output"; then
             info "下载成功！"
             return 0
         fi
@@ -65,13 +69,20 @@ echo "  FRP Console 一键安装"
 echo "========================================"
 echo ""
 
-read -p "请输入管理员密码: " ADMIN_PASSWORD
-echo ""
-read -p "请输入 API Token (用于 frpc 认证): " API_TOKEN
+read -p "请输入管理员密码 [留空则自动生成]: " ADMIN_PASSWORD
 echo ""
 read -p "请输入服务端口 [默认7600]: " PORT
 PORT=${PORT:-7600}
 echo ""
+
+# 自动生成密码和 Token
+if [ -z "$ADMIN_PASSWORD" ]; then
+    ADMIN_PASSWORD=$(openssl rand -base64 16 | tr -d '=+/')
+    info "已生成管理员密码: $ADMIN_PASSWORD"
+fi
+
+API_TOKEN=$(openssl rand -hex 32)
+info "已生成 API Token: $API_TOKEN"
 
 info "开始安装..."
 
@@ -101,14 +112,200 @@ if ! command -v docker-compose &> /dev/null; then
     chmod +x /usr/local/bin/docker-compose
 fi
 
-# 4. 下载 frpc（使用 jsDelivr 加速）
-info "下载 frpc..."
-FRPC_URL="https://cdn.jsdelivr.net/gh/Kevin25858/frp-console@main/bin/frpc"
-
-if ! download_with_mirror "$FRPC_URL" "/usr/local/bin/frpc"; then
-    error "无法下载 frpc"
+# 3. 下载 docker-compose.yml
+info "下载配置文件..."
+if ! download_from_mirrors "docker-compose.yml" "$INSTALL_DIR/docker-compose.yml"; then
+    error "无法下载 docker-compose.yml"
     exit 1
 fi
 
+# 替换配置
+sed -i "s/your_password/$ADMIN_PASSWORD/g" "$INSTALL_DIR/docker-compose.yml"
+sed -i "s/your_secret_key/$(openssl rand -hex 32)/g" "$INSTALL_DIR/docker-compose.yml"
+sed -i "s/your_api_token/$API_TOKEN/g" "$INSTALL_DIR/docker-compose.yml"
+sed -i "s/7600:7600/$PORT:7600/g" "$INSTALL_DIR/docker-compose.yml"
+
+# 4. 安装 frpc
+info "安装 frpc..."
+
+# 优先使用本地文件
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -f "$SCRIPT_DIR/bin/frpc" ]; then
+    info "使用本地 frpc 文件..."
+    cp "$SCRIPT_DIR/bin/frpc" /usr/local/bin/frpc
+elif [ -f "bin/frpc" ]; then
+    info "使用本地 frpc 文件..."
+    cp "bin/frpc" /usr/local/bin/frpc
+else
+    # 尝试下载
+    ARCH=$(uname -m)
+    case $ARCH in
+        x86_64) FRP_ARCH="amd64" ;;
+        aarch64|arm64) FRP_ARCH="arm64" ;;
+        *) error "不支持的架构: $ARCH"; exit 1 ;;
+    esac
+
+    FRP_PACKAGE="frp_${FRP_VERSION}_linux_${FRP_ARCH}"
+    FRP_TAR="${FRP_PACKAGE}.tar.gz"
+
+    # 尝试多个镜像源下载 frp
+    frp_mirrors=(
+        "https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/${FRP_TAR}"
+        "https://ghproxy.com/https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/${FRP_TAR}"
+        "https://mirror.ghproxy.com/https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/${FRP_TAR}"
+    )
+
+    FRP_DOWNLOADED=false
+    for mirror in "${frp_mirrors[@]}"; do
+        info "尝试从 $mirror 下载 frp..."
+        if download_with_retry "$mirror" "/tmp/$FRP_TAR"; then
+            FRP_DOWNLOADED=true
+            break
+        fi
+    done
+
+    if [ "$FRP_DOWNLOADED" = false ]; then
+        error "无法下载 frpc"
+        exit 1
+    fi
+
+    tar -xzf "/tmp/$FRP_TAR" -C /tmp
+    cp "/tmp/${FRP_PACKAGE}/frpc" /usr/local/bin/frpc
+    rm -rf "/tmp/${FRP_PACKAGE}" "/tmp/${FRP_TAR}"
+fi
+
 chmod +x /usr/local/bin/frpc
-info "frpc 下载成功"
+info "frpc 安装成功"
+
+# 5. 创建配置同步脚本
+info "创建配置同步服务..."
+mkdir -p /etc/frp-client
+
+cat > /usr/local/bin/frpc-sync.sh << SCRIPT
+#!/bin/bash
+CONFIG_FILE="/etc/frp-client/frpc.toml"
+TEMP_FILE="/etc/frp-client/frpc.toml.tmp"
+LOG_FILE="/var/log/frpc-sync.log"
+API_TOKEN="$API_TOKEN"
+PORT="$PORT"
+
+# 从多个源拉取配置
+fetch_config() {
+    local mirrors=(
+        "http://localhost:\$PORT/api/configs/1/export"
+    )
+    
+    for mirror in "\${mirrors[@]}"; do
+        if curl -s -H "Authorization: Bearer \$API_TOKEN" "\$mirror" > "\$TEMP_FILE" 2>/dev/null; then
+            # 检查配置是否有变化
+            if [[ -f "\$CONFIG_FILE" ]] && diff -q "\$CONFIG_FILE" "\$TEMP_FILE" > /dev/null 2>&1; then
+                rm "\$TEMP_FILE"
+                return 0
+            fi
+            
+            # 更新配置
+            mv "\$TEMP_FILE" "\$CONFIG_FILE"
+            echo "[\$(date)] 配置已更新，重启 frpc" >> "\$LOG_FILE"
+            
+            # 重启 frpc
+            systemctl restart frpc
+            return 0
+        fi
+    done
+    
+    echo "[\$(date)] 拉取配置失败" >> "\$LOG_FILE"
+    return 1
+}
+
+fetch_config
+SCRIPT
+chmod +x /usr/local/bin/frpc-sync.sh
+
+# 6. 创建 systemd 服务
+info "创建 frpc systemd 服务..."
+
+cat > /etc/systemd/system/frpc.service << EOF
+[Unit]
+Description=FRP Client
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/frpc -c /etc/frp-client/frpc.toml
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+cat > /etc/systemd/system/frpc-sync.service << EOF
+[Unit]
+Description=FRP Config Sync
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/frpc-sync.sh
+EOF
+
+cat > /etc/systemd/system/frpc-sync.timer << EOF
+[Unit]
+Description=FRP Config Sync Timer
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+
+[Install]
+WantedBy=timers.target
+EOF
+
+# 7. 启动 Web 端
+info "启动 Web 管理端..."
+cd $INSTALL_DIR
+docker-compose up -d
+
+# 等待 Web 端启动
+info "等待 Web 端启动..."
+for i in {1..30}; do
+    if curl -s http://localhost:$PORT/login > /dev/null 2>&1; then
+        break
+    fi
+    sleep 1
+done
+
+# 8. 首次拉取配置并启动 frpc
+info "初始化 frpc 配置..."
+/usr/local/bin/frpc-sync.sh || warn "首次拉取配置失败，将在定时任务中重试"
+
+# 9. 启动 frpc 服务
+info "启动 frpc 服务..."
+systemctl daemon-reload
+systemctl enable frpc
+systemctl enable frpc-sync.timer
+systemctl start frpc
+systemctl start frpc-sync.timer
+
+# 10. 完成
+echo ""
+echo "========================================"
+echo "  安装完成！"
+echo "========================================"
+echo ""
+echo "Web 管理界面: http://\$(hostname -I | awk '{print \$1}'):$PORT"
+echo "用户名: admin"
+echo "密码: $ADMIN_PASSWORD"
+echo ""
+echo "管理命令:"
+echo "  查看 frpc 状态: systemctl status frpc"
+echo "  查看同步状态: systemctl status frpc-sync.timer"
+echo "  查看日志: journalctl -u frpc -f"
+echo "  重启 Web: cd $INSTALL_DIR && docker-compose restart"
+echo ""
+echo "注意:"
+echo "  - Web 端使用 Docker 运行"
+echo "  - frpc 使用 systemd 运行（独立于 Docker）"
+echo "  - Docker 重启不会影响 frpc"
+echo "  - 配置修改后约1分钟自动同步到 frpc"
+echo ""
