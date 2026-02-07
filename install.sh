@@ -20,6 +20,49 @@ FRP_VERSION="0.52.3"
 ADMIN_PASSWORD=""
 API_TOKEN=""
 
+# 下载函数（带重试和镜像源）
+download_with_retry() {
+    local url=$1
+    local output=$2
+    local max_retries=3
+    local retry_count=0
+    
+    while [ $retry_count -lt $max_retries ]; do
+        if curl -fsSL --connect-timeout 30 --max-time 120 "$url" -o "$output" 2>/dev/null; then
+            return 0
+        fi
+        retry_count=$((retry_count + 1))
+        warn "下载失败，第 $retry_count 次重试..."
+        sleep 2
+    done
+    return 1
+}
+
+# 从多个源下载文件
+download_from_mirrors() {
+    local filename=$1
+    local output=$2
+    
+    # 镜像源列表
+    local mirrors=(
+        "https://raw.githubusercontent.com/Kevin25858/frp-console/main/$filename"
+        "https://cdn.jsdelivr.net/gh/Kevin25858/frp-console@main/$filename"
+        "https://ghproxy.com/https://raw.githubusercontent.com/Kevin25858/frp-console/main/$filename"
+        "https://mirror.ghproxy.com/https://raw.githubusercontent.com/Kevin25858/frp-console/main/$filename"
+    )
+    
+    for mirror in "${mirrors[@]}"; do
+        info "尝试从 $mirror 下载..."
+        if download_with_retry "$mirror" "$output"; then
+            info "下载成功！"
+            return 0
+        fi
+    done
+    
+    error "所有镜像源都下载失败"
+    return 1
+}
+
 # 交互式配置
 echo "========================================"
 echo "  FRP Console 一键安装"
@@ -44,18 +87,38 @@ cd $INSTALL_DIR
 # 2. 安装 Docker（如果没有）
 if ! command -v docker &> /dev/null; then
     info "安装 Docker..."
-    curl -fsSL https://get.docker.com | sh
+    # 尝试多个 Docker 安装脚本镜像
+    if ! curl -fsSL https://get.docker.com | sh 2>/dev/null; then
+        warn "官方脚本失败，尝试镜像..."
+        curl -fsSL https://mirror.ghproxy.com/https://raw.githubusercontent.com/docker/docker-install/master/install.sh | sh
+    fi
     systemctl enable docker
     systemctl start docker
 fi
 
 if ! command -v docker-compose &> /dev/null; then
     info "安装 Docker Compose..."
-    curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+    # 尝试多个镜像源
+    if ! curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose 2>/dev/null; then
+        curl -L "https://ghproxy.com/https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+    fi
     chmod +x /usr/local/bin/docker-compose
 fi
 
-# 3. 下载 frpc
+# 3. 下载 docker-compose.yml
+info "下载配置文件..."
+if ! download_from_mirrors "docker-compose.yml" "$INSTALL_DIR/docker-compose.yml"; then
+    error "无法下载 docker-compose.yml"
+    exit 1
+fi
+
+# 替换配置
+sed -i "s/your_password/$ADMIN_PASSWORD/g" "$INSTALL_DIR/docker-compose.yml"
+sed -i "s/your_secret_key/$(openssl rand -hex 32)/g" "$INSTALL_DIR/docker-compose.yml"
+sed -i "s/your_api_token/$API_TOKEN/g" "$INSTALL_DIR/docker-compose.yml"
+sed -i "s/7600:7600/$PORT:7600/g" "$INSTALL_DIR/docker-compose.yml"
+
+# 4. 下载 frpc
 info "下载 frpc..."
 ARCH=$(uname -m)
 case $ARCH in
@@ -66,68 +129,71 @@ esac
 
 FRP_PACKAGE="frp_${FRP_VERSION}_linux_${FRP_ARCH}"
 FRP_TAR="${FRP_PACKAGE}.tar.gz"
-FRP_URL="https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/${FRP_TAR}"
 
-wget -q "$FRP_URL" -O /tmp/$FRP_TAR
-tar -xzf /tmp/$FRP_TAR -C /tmp
+# 尝试多个镜像源下载 frp
+frp_mirrors=(
+    "https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/${FRP_TAR}"
+    "https://ghproxy.com/https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/${FRP_TAR}"
+    "https://mirror.ghproxy.com/https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/${FRP_TAR}"
+)
+
+FRP_DOWNLOADED=false
+for mirror in "${frp_mirrors[@]}"; do
+    info "尝试从 $mirror 下载 frp..."
+    if download_with_retry "$mirror" "/tmp/$FRP_TAR"; then
+        FRP_DOWNLOADED=true
+        break
+    fi
+done
+
+if [ "$FRP_DOWNLOADED" = false ]; then
+    error "无法下载 frp"
+    exit 1
+fi
+
+tar -xzf "/tmp/$FRP_TAR" -C /tmp
 cp "/tmp/${FRP_PACKAGE}/frpc" /usr/local/bin/frpc
 chmod +x /usr/local/bin/frpc
 rm -rf "/tmp/${FRP_PACKAGE}" "/tmp/${FRP_TAR}"
 
-# 4. 创建 docker-compose.yml
-info "创建 Docker Compose 配置..."
-cat > $INSTALL_DIR/docker-compose.yml << EOF
-version: '3.8'
-
-services:
-  frp-console:
-    image: ghcr.io/kevin25858/frp-console:latest
-    container_name: frp-console
-    restart: unless-stopped
-    ports:
-      - "${PORT}:7600"
-    environment:
-      - PORT=7600
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
-      - SECRET_KEY=$(openssl rand -hex 32)
-      - API_TOKEN=${API_TOKEN}
-    volumes:
-      - ./data:/app/data
-EOF
-
-# 5. 创建 frpc 配置同步脚本
+# 5. 创建配置同步脚本
 info "创建配置同步服务..."
 mkdir -p /etc/frp-client
 
-cat > /usr/local/bin/frpc-sync.sh << 'SCRIPT'
+cat > /usr/local/bin/frpc-sync.sh << SCRIPT
 #!/bin/bash
 CONFIG_FILE="/etc/frp-client/frpc.toml"
 TEMP_FILE="/etc/frp-client/frpc.toml.tmp"
 LOG_FILE="/var/log/frpc-sync.log"
+API_TOKEN="$API_TOKEN"
+PORT="$PORT"
 
-# 从 Web 端拉取配置
+# 从多个源拉取配置
 fetch_config() {
-    # 获取第一个客户端的配置（简化版）
-    if ! curl -s -H "Authorization: Bearer ${API_TOKEN}" \
-         "http://localhost:${PORT}/api/configs/1/export" > "$TEMP_FILE" 2>/dev/null; then
-        echo "[$(date)] 拉取配置失败" >> "$LOG_FILE"
-        return 1
-    fi
+    local mirrors=(
+        "http://localhost:\$PORT/api/configs/1/export"
+    )
     
-    # 检查配置是否有变化
-    if [[ -f "$CONFIG_FILE" ]] && diff -q "$CONFIG_FILE" "$TEMP_FILE" > /dev/null 2>&1; then
-        rm "$TEMP_FILE"
-        return 0
-    fi
+    for mirror in "\${mirrors[@]}"; do
+        if curl -s -H "Authorization: Bearer \$API_TOKEN" "\$mirror" > "\$TEMP_FILE" 2>/dev/null; then
+            # 检查配置是否有变化
+            if [[ -f "\$CONFIG_FILE" ]] && diff -q "\$CONFIG_FILE" "\$TEMP_FILE" > /dev/null 2>&1; then
+                rm "\$TEMP_FILE"
+                return 0
+            fi
+            
+            # 更新配置
+            mv "\$TEMP_FILE" "\$CONFIG_FILE"
+            echo "[\$(date)] 配置已更新，重启 frpc" >> "\$LOG_FILE"
+            
+            # 重启 frpc
+            systemctl restart frpc
+            return 0
+        fi
+    done
     
-    # 更新配置
-    mv "$TEMP_FILE" "$CONFIG_FILE"
-    echo "[$(date)] 配置已更新，重启 frpc" >> "$LOG_FILE"
-    
-    # 重启 frpc
-    systemctl restart frpc
-    
-    return 0
+    echo "[\$(date)] 拉取配置失败" >> "\$LOG_FILE"
+    return 1
 }
 
 fetch_config
@@ -159,8 +225,6 @@ After=network.target
 
 [Service]
 Type=oneshot
-Environment="API_TOKEN=${API_TOKEN}"
-Environment="PORT=${PORT}"
 ExecStart=/usr/local/bin/frpc-sync.sh
 EOF
 
@@ -178,15 +242,21 @@ EOF
 
 # 7. 启动 Web 端
 info "启动 Web 管理端..."
+cd $INSTALL_DIR
 docker-compose up -d
 
 # 等待 Web 端启动
 info "等待 Web 端启动..."
-sleep 5
+for i in {1..30}; do
+    if curl -s http://localhost:$PORT/login > /dev/null 2>&1; then
+        break
+    fi
+    sleep 1
+done
 
 # 8. 首次拉取配置并启动 frpc
 info "初始化 frpc 配置..."
-API_TOKEN="${API_TOKEN}" PORT="${PORT}" /usr/local/bin/frpc-sync.sh || warn "首次拉取配置失败，将在定时任务中重试"
+/usr/local/bin/frpc-sync.sh || warn "首次拉取配置失败，将在定时任务中重试"
 
 # 9. 启动 frpc 服务
 info "启动 frpc 服务..."
@@ -202,15 +272,15 @@ echo "========================================"
 echo "  安装完成！"
 echo "========================================"
 echo ""
-echo "Web 管理界面: http://$(hostname -I | awk '{print $1}'):${PORT}"
+echo "Web 管理界面: http://\$(hostname -I | awk '{print \$1}'):$PORT"
 echo "用户名: admin"
-echo "密码: ${ADMIN_PASSWORD}"
+echo "密码: $ADMIN_PASSWORD"
 echo ""
 echo "管理命令:"
 echo "  查看 frpc 状态: systemctl status frpc"
 echo "  查看同步状态: systemctl status frpc-sync.timer"
 echo "  查看日志: journalctl -u frpc -f"
-echo "  重启 Web: cd ${INSTALL_DIR} && docker-compose restart"
+echo "  重启 Web: cd $INSTALL_DIR && docker-compose restart"
 echo ""
 echo "注意:"
 echo "  - Web 端使用 Docker 运行"
