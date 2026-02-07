@@ -20,21 +20,14 @@ FRP_VERSION="0.52.3"
 ADMIN_PASSWORD=""
 API_TOKEN=""
 
-# 下载函数（带重试和镜像源）
-download_with_retry() {
+# 下载函数（带镜像源切换）
+download_with_mirror() {
     local url=$1
     local output=$2
-    local max_retries=3
-    local retry_count=0
     
-    while [ $retry_count -lt $max_retries ]; do
-        if curl -fsSL --connect-timeout 30 --max-time 120 "$url" -o "$output" 2>/dev/null; then
-            return 0
-        fi
-        retry_count=$((retry_count + 1))
-        warn "下载失败，第 $retry_count 次重试..."
-        sleep 2
-    done
+    if curl -fsSL --connect-timeout 10 --max-time 60 "$url" -o "$output" 2>/dev/null; then
+        return 0
+    fi
     return 1
 }
 
@@ -56,7 +49,7 @@ download_from_mirrors() {
     
     for mirror in "${mirrors[@]}"; do
         info "尝试从 $mirror 下载..."
-        if download_with_retry "$mirror" "$output"; then
+        if download_with_mirror "$mirror" "$output"; then
             info "下载成功！"
             return 0
         fi
@@ -146,7 +139,7 @@ frp_mirrors=(
 FRP_DOWNLOADED=false
 for mirror in "${frp_mirrors[@]}"; do
     info "尝试从 $mirror 下载 frp..."
-    if download_with_retry "$mirror" "/tmp/$FRP_TAR"; then
+    if download_with_mirror "$mirror" "/tmp/$FRP_TAR"; then
         FRP_DOWNLOADED=true
         break
     fi
