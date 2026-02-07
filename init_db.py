@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""初始化 FRP Web Multi 数据库，导入现有客户端配置"""
+"""初始化 FRP Web Multi 数据库，导入示例客户端配置"""
 
 import sqlite3
 import os
@@ -11,35 +11,21 @@ CONFIGS_DIR = '/opt/frp-console/clients'
 os.makedirs(os.path.dirname(DATABASE), exist_ok=True)
 os.makedirs(CONFIGS_DIR, exist_ok=True)
 
-# 现有客户端配置
+# 示例客户端配置（请替换为实际配置）
 clients = [
     {
-        'name': 'frpc-mc-1panel',
+        'name': 'example-client-1',
         'config_path': '/opt/frp-console/clients/client-1.toml',
-        'local_port': 2055,
-        'remote_port': 58430,
-        'server_addr': '117.50.222.15'
+        'local_port': 8080,
+        'remote_port': 8080,
+        'server_addr': 'your-server-address'
     },
     {
-        'name': 'frpc-mc-2',
+        'name': 'example-client-2',
         'config_path': '/opt/frp-console/clients/client-2.toml',
-        'local_port': 25565,
-        'remote_port': 27433,
-        'server_addr': '160.202.238.116'
-    },
-    {
-        'name': 'frpc-mc-3',
-        'config_path': '/opt/frp-console/clients/client-3.toml',
-        'local_port': 25565,
-        'remote_port': 43024,
-        'server_addr': '117.50.222.15'
-    },
-    {
-        'name': 'frpc-mc-4',
-        'config_path': '/opt/frp-console/clients/client-4.toml',
-        'local_port': 25565,
-        'remote_port': 8751,
-        'server_addr': '119.188.164.166'
+        'local_port': 3000,
+        'remote_port': 3000,
+        'server_addr': 'your-server-address'
     }
 ]
 
@@ -87,7 +73,7 @@ c.execute('''
     )
 ''')
 
-# 导入现有客户端
+# 导入示例客户端
 for client in clients:
     # 检查是否已存在
     existing = c.execute('SELECT id FROM clients WHERE name = ?', (client['name'],)).fetchone()
@@ -110,5 +96,5 @@ conn.commit()
 conn.close()
 
 print(f"\n🎉 数据库初始化完成！")
-print(f"📊 共导入 {len(clients)} 个客户端")
+print(f"📊 共导入 {len(clients)} 个示例客户端")
 print(f"💡 请访问 http://服务器IP:7600 管理您的 FRP 客户端")

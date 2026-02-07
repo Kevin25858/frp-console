@@ -320,6 +320,16 @@ class ProcessService:
                 text=True
             )
             if result.returncode != 0:
+                # 如果在 Docker 环境，也检查 .docker.toml 的进程
+                if os.path.exists('/.dockerenv') and not config_filename.endswith('.docker.toml'):
+                    docker_config_filename = config_filename.replace('.toml', '.docker.toml')
+                    result = subprocess.run(
+                        ['pgrep', '-f', f'frpc.*-c.*{docker_config_filename}'],
+                        capture_output=True,
+                        text=True
+                    )
+                    if result.returncode == 0:
+                        return True
                 return False
 
             # 方法2: 检查端口是否被监听（双重确认）
@@ -399,6 +409,15 @@ class ProcessService:
                     if os.path.abspath(running_config) == abs_config_path:
                         is_running = True
                         break
+                
+                # 如果在 Docker 环境，也检查 .docker.toml 的进程
+                if not is_running and os.path.exists('/.dockerenv') and not config_path.endswith('.docker.toml'):
+                    docker_config_path = config_path.replace('.toml', '.docker.toml')
+                    abs_docker_config_path = os.path.abspath(docker_config_path)
+                    for running_config, pid in config_to_pid.items():
+                        if os.path.abspath(running_config) == abs_docker_config_path:
+                            is_running = True
+                            break
                 
                 # 如果进程存在，进一步检查端口确认不是僵尸进程
                 if is_running:
