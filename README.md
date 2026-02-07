@@ -9,6 +9,11 @@
 - 实时看日志，不用登录服务器
 - 客户端掉线自动邮件提醒
 
+## 效果图
+
+### 仪表板
+![仪表板](docs/screenshots/dashboard.png)
+
 ## 和传统方式对比
 
 | 传统方式 | FRP Console |
