@@ -14,6 +14,7 @@ from utils.logger import ColorLogger
 
 def migrate_admin_to_users():
     """将现有管理员配置迁移到 users 表"""
+    import os
     conn = sqlite3.connect(Config.DATABASE_URL)
     c = conn.cursor()
 
@@ -21,6 +22,20 @@ def migrate_admin_to_users():
         # 检查是否已有用户数据
         c.execute('SELECT COUNT(*) FROM users')
         count = c.fetchone()[0]
+
+        # 如果环境变量设置了 ADMIN_PASSWORD，强制更新密码
+        env_password = os.environ.get('ADMIN_PASSWORD')
+        if env_password and count > 0:
+            from utils.password import hash_password
+            password_salt, password_hash = hash_password(env_password)
+            c.execute('''
+                UPDATE users SET password_hash = ?, password_salt = ?
+                WHERE username = ?
+            ''', (password_hash, password_salt, Config.ADMIN_USER))
+            conn.commit()
+            ColorLogger.success(f'已使用环境变量更新管理员密码: {Config.ADMIN_USER}', 'Migration')
+            conn.close()
+            return
 
         if count > 0:
             ColorLogger.info('用户表已有数据，跳过迁移', 'Migration')
