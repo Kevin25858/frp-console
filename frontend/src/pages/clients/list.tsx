@@ -48,14 +48,34 @@ export default function ClientListPage() {
     }, [clients, searchTerm]);
 
     const handleAction = async (clientId: number, action: string) => {
+        // 立即更新本地状态，提供即时反馈
+        const newStatus = action === 'start' ? 'running' : action === 'stop' ? 'stopped' : 'running';
+        setClientStatuses(prev => ({ ...prev, [clientId]: newStatus }));
+        
         try {
             await apiFetch(`/clients/${clientId}/${action}` , {
                 method: 'POST',
             });
-            fetchClients();
             const actionKey = action === 'start' ? 'startSuccess' : action === 'stop' ? 'stopSuccess' : 'restartSuccess';
             success(t(`clients.${actionKey}`));
+            // 后台刷新真实状态
+            setTimeout(() => {
+                fetchClients().then(() => {
+                    // 刷新后清除本地状态，使用服务器状态
+                    setClientStatuses(prev => {
+                        const newState = { ...prev };
+                        delete newState[clientId];
+                        return newState;
+                    });
+                });
+            }, 1000);
         } catch (error) {
+            // 失败时恢复本地状态
+            setClientStatuses(prev => {
+                const newState = { ...prev };
+                delete newState[clientId];
+                return newState;
+            });
             console.error(`Failed to ${action} client ${clientId}:`, error);
             toastError(t('clients.actionError'));
         }
@@ -76,6 +96,8 @@ export default function ClientListPage() {
 
     // 本地状态存储 always_on 状态，用于快速响应
     const [alwaysOnStates, setAlwaysOnStates] = useState<Record<number, boolean>>({});
+    // 本地状态存储客户端运行状态，用于立即响应启动/停止
+    const [clientStatuses, setClientStatuses] = useState<Record<number, string>>({});
 
     const handleAlwaysOnChange = useCallback(async (clientId: number, newValue: boolean) => {
         // 立即更新本地状态，提供即时反馈
@@ -96,6 +118,11 @@ export default function ClientListPage() {
         }
     }, [fetchClients, success, toastError, t]);
 
+    // 获取客户端显示状态（本地状态优先）
+    const getClientStatus = useCallback((client: Client) => {
+        return clientStatuses[client.id] !== undefined ? clientStatuses[client.id] : client.status;
+    }, [clientStatuses]);
+
     if (isLoading && !clients) {
         return <div>{t('common.loading')}</div>
     }
@@ -115,7 +142,12 @@ export default function ClientListPage() {
                         onChange={(e) => setSearchTerm(e.target.value)}
                         className="w-64"
                     />
-                    <AddClientDialog onClientAdded={fetchClients} />
+                    <AddClientDialog onClientAdded={() => {
+                        // 立即刷新
+                        fetchClients();
+                        // 1秒后再次刷新，确保 Always-On 启动后的状态同步
+                        setTimeout(() => fetchClients(), 1000);
+                    }} />
                 </div>
             </div>
             <div className="border rounded-lg">
@@ -135,7 +167,7 @@ export default function ClientListPage() {
                     {filteredClients.map((client) => (
                         <TableRow key={client.id}>
                             <TableCell className="font-medium">{client.name}</TableCell>
-                            <TableCell><Badge variant={client.status === "running" ? "default" : client.status === "stopped" ? "secondary" : "destructive"}>{client.status}</Badge></TableCell>
+                            <TableCell><Badge variant={getClientStatus(client) === "running" ? "default" : getClientStatus(client) === "stopped" ? "secondary" : "destructive"}>{getClientStatus(client)}</Badge></TableCell>
                             <TableCell>
                                 <Switch
                                     checked={alwaysOnStates[client.id] !== undefined ? alwaysOnStates[client.id] : Boolean(client.always_on)}
@@ -211,7 +243,7 @@ export default function ClientListPage() {
                                                 variant="outline"
                                                 size="icon"
                                                 className="h-8 w-8"
-                                                title={t('clients.logs')}
+                                                title={t('clients.viewLogs')}
                                             >
                                                 <ScrollText className="h-4 w-4" />
                                             </Button>
@@ -266,8 +298,8 @@ export default function ClientListPage() {
                         <CardContent className="p-4">
                             <div className="flex items-center justify-between mb-3">
                                 <div className="flex items-center space-x-2">
-                                    <Badge variant={client.status === "running" ? "default" : client.status === "stopped" ? "secondary" : "destructive"}>
-                                        {client.status}
+                                    <Badge variant={getClientStatus(client) === "running" ? "default" : getClientStatus(client) === "stopped" ? "secondary" : "destructive"}>
+                                        {getClientStatus(client)}
                                     </Badge>
                                     <span className="font-medium">{client.name}</span>
                                 </div>

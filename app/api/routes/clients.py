@@ -55,6 +55,14 @@ def create_client():
     success, result = ClientService.create_client(data)
 
     if success:
+        # 如果设置了 always_on，立即启动客户端
+        if data.get('always_on'):
+            client_id = result.get('id')
+            client = ClientService.get_client(client_id)
+            if client:
+                from services.process_service import ProcessService
+                ProcessService.start_frpc(client_id, client['config_path'])
+                ColorLogger.info(f"客户端 {client['name']} 已创建并自动启动 (Always-On)", 'API')
         return jsonify(result), 201
     else:
         return jsonify(result), 400

@@ -24,10 +24,15 @@ class Config:
 
     # 目录配置
     # 根据环境自动判断基础目录（容器内用 /app，宿主机用 /opt/frp-console）
+    # 支持 host 网络模式，通过检查多个路径来确定基础目录
     if os.path.exists('/app/frpc/frpc'):
         BASE_DIR = '/app'
-    else:
+    elif os.path.exists('/opt/frp-console/frpc/frpc'):
         BASE_DIR = '/opt/frp-console'
+    else:
+        # 默认使用 /app，并创建必要的目录结构
+        BASE_DIR = '/app'
+    
     CONFIGS_DIR = os.path.join(BASE_DIR, 'clients')
     LOGS_DIR = os.path.join(BASE_DIR, 'logs')
     DATA_DIR = os.path.join(BASE_DIR, 'data')

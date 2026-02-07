@@ -2,7 +2,7 @@
 
 一个 Web 端的 FRPC 客户端管理工具。不用手动改配置文件，在浏览器里就能管理多个 FRPC 客户端。
 
-![仪表板](docs/screenshots/dashboard.png)
+![仪表板](https://github.com/Kevin25858/frp-console/blob/main/docs/screenshots/dashboard.png?raw=true)
 
 ## 能做什么
 
