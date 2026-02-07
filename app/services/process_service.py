@@ -351,14 +351,8 @@ class ProcessService:
                         is_running = True
                         break
                 
-                # 如果进程存在，进一步检查端口确认不是僵尸进程
-                if is_running:
-                    admin_port = ProcessService.get_admin_port(config_path)
-                    if admin_port:
-                        # 如果配置了 admin 端口，检查端口是否被占用
-                        if ProcessService.check_port_available(admin_port):
-                            # 端口可用但进程存在，可能是僵尸进程
-                            is_running = False
+                # 注意：跳过端口检查以提高性能
+                # 僵尸进程检测在 is_frpc_running 中进行
                 
                 result[client_id] = is_running
                 

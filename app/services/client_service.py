@@ -244,12 +244,24 @@ remote_port = {remote_port}
             if not valid:
                 return False, {'error': message}
 
+            # 检查客户端是否正在运行
+            ProcessService = _get_process_service()
+            is_running = ProcessService.is_frpc_running(client_id, client['config_path'])
+            
+            # 如果正在运行，先停止
+            if is_running:
+                ProcessService.stop_frpc(client_id)
+
             # 重命名配置文件
             old_config_path = client['config_path']
             new_config_path = os.path.join(Config.CONFIGS_DIR, f"{name}.toml")
             if os.path.exists(old_config_path):
                 os.rename(old_config_path, new_config_path)
             config_path = new_config_path
+            
+            # 如果之前在运行，用新配置重新启动
+            if is_running:
+                ProcessService.start_frpc(client_id, config_path)
         else:
             config_path = client['config_path']
 
