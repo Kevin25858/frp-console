@@ -66,15 +66,15 @@ class Config:
         password_salt = None
         password_hash = None
 
-        # 优先从环境变量读取
-        admin_user = os.environ.get('ADMIN_USER')
+        # 优先从环境变量读取密码（ADMIN_PASSWORD 单独设置即可）
+        admin_user = os.environ.get('ADMIN_USER', 'admin')  # 默认用户名 admin
         env_password = os.environ.get('ADMIN_PASSWORD')
-        
-        if admin_user and env_password:
+
+        if env_password:
             # 环境变量中的密码需要哈希
             from utils.password import hash_password
             password_salt, password_hash = hash_password(env_password)
-            ColorLogger.info('使用环境变量配置的管理员账户', 'Config')
+            ColorLogger.info('使用环境变量配置的密码', 'Config')
         elif os.path.exists(cls.CONFIG_FILE):
             # 如果环境变量未设置，尝试从配置文件读取
             try:
