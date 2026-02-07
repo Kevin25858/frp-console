@@ -27,7 +27,8 @@
 docker pull ghcr.io/kevin25858/frp-console:latest
 
 # 运行（把 your_password 换成你的密码）
-docker run -d --name frp-console -p 7600:7600 \
+# 使用 host 网络模式，让 frpc 可以访问宿主机的 localhost
+docker run -d --name frp-console --network host \
   -v /opt/frp-console/data:/app/data \
   -v /opt/frp-console/clients:/app/clients \
   -v /opt/frp-console/logs:/app/logs \
@@ -49,7 +50,8 @@ docker stop frp-console
 docker rm frp-console
 
 # 重新运行（数据不会丢失）
-docker run -d --name frp-console -p 7600:7600 \
+# 使用 host 网络模式，让 frpc 可以访问宿主机的 localhost
+docker run -d --name frp-console --network host \
   -v /opt/frp-console/data:/app/data \
   -v /opt/frp-console/clients:/app/clients \
   -v /opt/frp-console/logs:/app/logs \
