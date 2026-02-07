@@ -23,7 +23,11 @@ class Config:
     ).replace('sqlite:///', '')
 
     # 目录配置
-    BASE_DIR = '/opt/frp-console'
+    # 根据环境自动判断基础目录（容器内用 /app，宿主机用 /opt/frp-console）
+    if os.path.exists('/app/frpc/frpc'):
+        BASE_DIR = '/app'
+    else:
+        BASE_DIR = '/opt/frp-console'
     CONFIGS_DIR = os.path.join(BASE_DIR, 'clients')
     LOGS_DIR = os.path.join(BASE_DIR, 'logs')
     DATA_DIR = os.path.join(BASE_DIR, 'data')
