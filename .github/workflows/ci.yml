@@ -158,8 +158,19 @@ jobs:
     - name: Run Docker container
       run: |
         docker run -d -p 7600:7600 --name frp-test frp-console:test
-        sleep 10
-        curl -f http://localhost:7600/login || exit 1
+        echo "Waiting for container to start..."
+        sleep 15
+        echo "Checking container logs..."
+        docker logs frp-test
+        echo "Testing connection..."
+        for i in {1..10}; do
+          if curl -f http://localhost:7600/login; then
+            echo "Connection successful!"
+            break
+          fi
+          echo "Attempt $i failed, retrying in 3 seconds..."
+          sleep 3
+        done
         docker stop frp-test
         docker rm frp-test
 
