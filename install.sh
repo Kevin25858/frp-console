@@ -49,6 +49,9 @@ download_from_mirrors() {
         "https://cdn.jsdelivr.net/gh/Kevin25858/frp-console@main/$filename"
         "https://ghproxy.com/https://raw.githubusercontent.com/Kevin25858/frp-console/main/$filename"
         "https://mirror.ghproxy.com/https://raw.githubusercontent.com/Kevin25858/frp-console/main/$filename"
+        "https://hub.gitmirror.com/https://raw.githubusercontent.com/Kevin25858/frp-console/main/$filename"
+        "https://ghps.cc/https://raw.githubusercontent.com/Kevin25858/frp-console/main/$filename"
+        "https://gh.api.99988866.xyz/https://raw.githubusercontent.com/Kevin25858/frp-console/main/$filename"
     )
     
     for mirror in "${mirrors[@]}"; do
@@ -135,6 +138,9 @@ frp_mirrors=(
     "https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/${FRP_TAR}"
     "https://ghproxy.com/https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/${FRP_TAR}"
     "https://mirror.ghproxy.com/https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/${FRP_TAR}"
+    "https://hub.gitmirror.com/https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/${FRP_TAR}"
+    "https://ghps.cc/https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/${FRP_TAR}"
+    "https://gh.api.99988866.xyz/https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/${FRP_TAR}"
 )
 
 FRP_DOWNLOADED=false
