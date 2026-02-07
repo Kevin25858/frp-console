@@ -41,11 +41,17 @@
 
 ### 使用 Docker 部署（推荐）
 
-```bash
-# 拉取最新镜像
-docker pull ghcr.io/kevin25858/frp-console:latest
+**1. 拉取镜像**
 
-# 运行容器（只需设置管理员密码）
+```bash
+docker pull ghcr.io/kevin25858/frp-console:latest
+```
+
+**2. 运行容器**
+
+将 `your_secure_password` 替换为你想要设置的管理员密码：
+
+```bash
 docker run -d --name frp-console -p 7600:7600 \
   -v /opt/frp-console/data:/app/data \
   -v /opt/frp-console/clients:/app/clients \
@@ -53,9 +59,14 @@ docker run -d --name frp-console -p 7600:7600 \
   -e ADMIN_PASSWORD=your_secure_password \
   --restart unless-stopped \
   ghcr.io/kevin25858/frp-console:latest
-
-# 访问 http://localhost:7600
 ```
+
+**3. 访问系统**
+
+打开浏览器访问 http://localhost:7600
+
+- 用户名：admin
+- 密码：你设置的 `ADMIN_PASSWORD`
 
 ## 📖 功能说明
 
