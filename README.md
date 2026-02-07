@@ -2,17 +2,14 @@
 
 一个 Web 端的 FRPC 客户端管理工具。不用手动改配置文件，在浏览器里就能管理多个 FRPC 客户端。
 
+![仪表板](docs/screenshots/dashboard.png)
+
 ## 能做什么
 
 - 在网页上配置 FRPC，不用记参数
 - 一键启动、停止、重启客户端
 - 实时看日志，不用登录服务器
 - 客户端掉线自动邮件提醒
-
-## 效果图
-
-### 仪表板
-![仪表板](docs/screenshots/dashboard.png)
 
 ## 和传统方式对比
 
