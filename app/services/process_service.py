@@ -148,6 +148,52 @@ class ProcessService:
         return None
 
     @staticmethod
+    def _prepare_config_for_docker(config_path: str) -> str:
+        """
+        为 Docker 环境准备配置文件
+        如果在容器内运行，将 127.0.0.1 替换为宿主机的 IP
+        """
+        # 检测是否在 Docker 容器内
+        if not os.path.exists('/.dockerenv'):
+            return config_path
+
+        # 读取原始配置
+        with open(config_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # 如果配置中包含 127.0.0.1，需要替换
+        if '127.0.0.1' in content or 'localhost' in content:
+            # 获取宿主机 IP（Docker 默认网关）
+            try:
+                # 方法1: 从 /proc/net/route 获取网关
+                with open('/proc/net/route', 'r') as f:
+                    for line in f:
+                        parts = line.strip().split()
+                        if len(parts) >= 3 and parts[1] == '00000000':
+                            gateway_hex = parts[2]
+                            # 转换十六进制 IP
+                            gateway_ip = '.'.join(str(int(gateway_hex[i:i+2], 16)) for i in (6, 4, 2, 0))
+                            break
+                    else:
+                        gateway_ip = '172.17.0.1'  # 默认 Docker 网关
+            except:
+                gateway_ip = '172.17.0.1'
+
+            # 替换 127.0.0.1 和 localhost
+            new_content = content.replace('127.0.0.1', gateway_ip)
+            new_content = new_content.replace('localhost', gateway_ip)
+
+            # 写入临时配置文件
+            temp_config_path = config_path.replace('.toml', '.docker.toml')
+            with open(temp_config_path, 'w', encoding='utf-8') as f:
+                f.write(new_content)
+
+            ColorLogger.info(f'Docker 环境: 已将 127.0.0.1 替换为 {gateway_ip}', 'FRPC')
+            return temp_config_path
+
+        return config_path
+
+    @staticmethod
     def start_frpc(client_id: int, config_path: str, clear_log: bool = False) -> Tuple[bool, str]:
         """
         启动 frpc 进程
@@ -165,6 +211,9 @@ class ProcessService:
             admin_port = ProcessService.get_admin_port(config_path)
             if admin_port and not ProcessService.check_port_available(admin_port):
                 return False, f"端口 {admin_port} 已被占用，无法启动"
+
+            # 为 Docker 环境准备配置
+            actual_config_path = ProcessService._prepare_config_for_docker(config_path)
 
             # 日志文件路径
             log_file = f"{Config.LOGS_DIR}/frpc/client-{client_id}.log"
@@ -210,7 +259,7 @@ class ProcessService:
             cmd = [
                 'nohup',
                 Config.FRPC_BINARY,
-                '-c', config_path
+                '-c', actual_config_path
             ]
             
             with open(log_file, 'a', encoding='utf-8') as log_f:
