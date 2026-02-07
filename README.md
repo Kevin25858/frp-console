@@ -45,13 +45,12 @@
 # 拉取最新镜像
 docker pull ghcr.io/kevin25858/frp-console:latest
 
-# 运行容器
+# 运行容器（只需设置管理员密码）
 docker run -d --name frp-console -p 7600:7600 \
   -v /opt/frp-console/data:/app/data \
   -v /opt/frp-console/clients:/app/clients \
   -v /opt/frp-console/logs:/app/logs \
   -e ADMIN_PASSWORD=your_secure_password \
-  -e SECRET_KEY=your_secret_key \
   --restart unless-stopped \
   ghcr.io/kevin25858/frp-console:latest
 
