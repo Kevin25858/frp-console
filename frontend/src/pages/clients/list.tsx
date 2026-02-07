@@ -1,10 +1,9 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useApi } from "@/hooks/useApi.ts";
 import { apiFetch } from "@/lib/api.ts";
 import { useToast } from "@/contexts/toast-context.tsx";
 import { AddClientDialog } from "./add-client-dialog.tsx";
-import { ViewLogsDialog } from "./view-logs-dialog.tsx";
 import { ViewConfigDialog } from "./view-config-dialog.tsx";
 import { EditClientDialog } from "./edit-client-dialog.tsx";
 import { Input } from "@/components/ui/input.tsx";
@@ -30,8 +29,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog.tsx";
-import { Play, Square, RotateCcw, FileText, Edit3, ScrollText, Trash2 } from "lucide-react";
-import { Switch } from "@/components/ui/switch.tsx";
+import { Play, Square, RotateCcw, FileText, Edit3, Trash2 } from "lucide-react";
 import type { Client } from "@/types";
 
 export default function ClientListPage() {
@@ -47,45 +45,21 @@ export default function ClientListPage() {
         );
     }, [clients, searchTerm]);
 
-    const handleAction = async (clientId: number, action: string) => {
-        // 立即更新本地状态，提供即时反馈
-        const newStatus = action === 'start' ? 'running' : action === 'stop' ? 'stopped' : 'running';
-        setClientStatuses(prev => ({ ...prev, [clientId]: newStatus }));
-        
+    // 控制 frpc 服务（通过后端调用 systemctl）
+    const handleServiceAction = async (action: string) => {
         try {
-            await apiFetch(`/clients/${clientId}/${action}` , {
-                method: 'POST',
-            });
-            const actionKey = action === 'start' ? 'startSuccess' : action === 'stop' ? 'stopSuccess' : 'restartSuccess';
-            success(t(`clients.${actionKey}`));
-            // 后台刷新真实状态
-            setTimeout(() => {
-                fetchClients().then(() => {
-                    // 刷新后清除本地状态，使用服务器状态
-                    setClientStatuses(prev => {
-                        const newState = { ...prev };
-                        delete newState[clientId];
-                        return newState;
-                    });
-                });
-            }, 1000);
+            await apiFetch(`/service/${action}`, { method: 'POST' });
+            const actionText = action === 'start' ? '启动' : action === 'stop' ? '停止' : '重启';
+            success(`frpc 服务${actionText}成功`);
         } catch (error) {
-            // 失败时恢复本地状态
-            setClientStatuses(prev => {
-                const newState = { ...prev };
-                delete newState[clientId];
-                return newState;
-            });
-            console.error(`Failed to ${action} client ${clientId}:`, error);
-            toastError(t('clients.actionError'));
+            console.error(`Failed to ${action} service:`, error);
+            toastError(`操作失败: ${error}`);
         }
     };
 
     const handleDelete = async (clientId: number) => {
         try {
-            await apiFetch(`/clients/${clientId}` , {
-                method: 'DELETE',
-            });
+            await apiFetch(`/clients/${clientId}`, { method: 'DELETE' });
             fetchClients();
             success(t('clients.deleteSuccess'));
         } catch (error) {
@@ -93,35 +67,6 @@ export default function ClientListPage() {
             toastError(t('clients.deleteError'));
         }
     };
-
-    // 本地状态存储 always_on 状态，用于快速响应
-    const [alwaysOnStates, setAlwaysOnStates] = useState<Record<number, boolean>>({});
-    // 本地状态存储客户端运行状态，用于立即响应启动/停止
-    const [clientStatuses, setClientStatuses] = useState<Record<number, string>>({});
-
-    const handleAlwaysOnChange = useCallback(async (clientId: number, newValue: boolean) => {
-        // 立即更新本地状态，提供即时反馈
-        setAlwaysOnStates(prev => ({ ...prev, [clientId]: newValue }));
-        
-        try {
-            await apiFetch(`/clients/${clientId}/always-on`, {
-                method: 'POST',
-                body: JSON.stringify({ always_on: newValue }),
-            });
-            // 成功后刷新数据
-            fetchClients();
-            success(newValue ? t('clients.alwaysOnEnabled') : t('clients.alwaysOnDisabled'));
-        } catch (_error) {
-            // 失败时恢复本地状态
-            setAlwaysOnStates(prev => ({ ...prev, [clientId]: !newValue }));
-            toastError(t('clients.alwaysOnError'));
-        }
-    }, [fetchClients, success, toastError, t]);
-
-    // 获取客户端显示状态（本地状态优先）
-    const getClientStatus = useCallback((client: Client) => {
-        return clientStatuses[client.id] !== undefined ? clientStatuses[client.id] : client.status;
-    }, [clientStatuses]);
 
     if (isLoading && !clients) {
         return <div>{t('common.loading')}</div>
@@ -133,95 +78,83 @@ export default function ClientListPage() {
 
     return (
         <div>
+            {/* 服务控制栏 */}
+            <div className="flex justify-between items-center mb-4 p-4 bg-muted rounded-lg">
+                <div>
+                    <h3 className="font-semibold">frpc 服务控制</h3>
+                    <p className="text-sm text-muted-foreground">控制 frpc 服务的启动、停止和重启</p>
+                </div>
+                <div className="flex gap-2">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleServiceAction('start')}
+                        className="text-green-600 hover:bg-green-50"
+                    >
+                        <Play className="h-4 w-4 mr-1" />
+                        启动
+                    </Button>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleServiceAction('stop')}
+                        className="text-orange-600 hover:bg-orange-50"
+                    >
+                        <Square className="h-4 w-4 mr-1" />
+                        停止
+                    </Button>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleServiceAction('restart')}
+                        className="text-blue-600 hover:bg-blue-50"
+                    >
+                        <RotateCcw className="h-4 w-4 mr-1" />
+                        重启
+                    </Button>
+                </div>
+            </div>
+
             <div className="flex justify-between items-center mb-4">
                 <h2 className="text-2xl font-bold">{t('clients.title')}</h2>
-                 <div className="flex items-center space-x-2">
-                    <Input 
+                <div className="flex items-center space-x-2">
+                    <Input
                         placeholder={t('clients.searchPlaceholder')}
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         className="w-64"
                     />
-                    <AddClientDialog onClientAdded={() => {
-                        // 立即刷新
-                        fetchClients();
-                        // 1秒后再次刷新，确保 Always-On 启动后的状态同步
-                        setTimeout(() => fetchClients(), 1000);
-                    }} />
+                    <AddClientDialog onClientAdded={fetchClients} />
                 </div>
             </div>
+
             <div className="border rounded-lg">
-            <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead>{t('clients.name')}</TableHead>
-                        <TableHead>{t('clients.status')}</TableHead>
-                        <TableHead>{t('clients.alwaysOn')}</TableHead>
-                        <TableHead>{t('clients.localPort')}</TableHead>
-                        <TableHead>{t('clients.remotePort')}</TableHead>
-                        <TableHead>{t('clients.serverAddress')}</TableHead>
-                        <TableHead className="text-right">{t('clients.actions')}</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {filteredClients.map((client) => (
-                        <TableRow key={client.id}>
-                            <TableCell className="font-medium">{client.name}</TableCell>
-                            <TableCell><Badge variant={getClientStatus(client) === "running" ? "default" : getClientStatus(client) === "stopped" ? "secondary" : "destructive"}>{getClientStatus(client)}</Badge></TableCell>
-                            <TableCell>
-                                <Switch
-                                    checked={alwaysOnStates[client.id] !== undefined ? alwaysOnStates[client.id] : Boolean(client.always_on)}
-                                    onCheckedChange={(checked) => handleAlwaysOnChange(client.id, checked)}
-                                    title={t('clients.alwaysOn')}
-                                />
-                            </TableCell>
-                            <TableCell>{client.local_port}</TableCell>
-                            <TableCell>{client.remote_port}</TableCell>
-                            <TableCell>{client.server_addr}</TableCell>
-                            <TableCell className="text-right">
-                                <div className="flex items-center justify-end gap-1">
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="icon"
-                                            className="h-8 w-8 text-green-600 hover:bg-green-50 hover:text-green-700 border-green-200"
-                                            onClick={() => handleAction(client.id, 'start')}
-                                            title={t('clients.start')}
-                                        >
-                                            <Play className="h-4 w-4" />
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="icon"
-                                            className="h-8 w-8 text-orange-600 hover:bg-orange-50 hover:text-orange-700 border-orange-200"
-                                            onClick={() => handleAction(client.id, 'stop')}
-                                            title={t('clients.stop')}
-                                        >
-                                            <Square className="h-4 w-4" />
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="icon"
-                                            className="h-8 w-8 text-blue-600 hover:bg-blue-50 hover:text-blue-700 border-blue-200"
-                                            onClick={() => handleAction(client.id, 'restart')}
-                                            title={t('clients.restart')}
-                                        >
-                                            <RotateCcw className="h-4 w-4" />
-                                        </Button>
-
-                                        {/* 分隔线 */}
-                                        <div className="w-px h-6 bg-border mx-1" />
-
-                                        {/* 管理按钮组 */}
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>{t('clients.name')}</TableHead>
+                            <TableHead>{t('clients.localPort')}</TableHead>
+                            <TableHead>{t('clients.remotePort')}</TableHead>
+                            <TableHead>{t('clients.serverAddress')}</TableHead>
+                            <TableHead className="text-right">{t('clients.actions')}</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {filteredClients.map((client) => (
+                            <TableRow key={client.id}>
+                                <TableCell className="font-medium">{client.name}</TableCell>
+                                <TableCell>{client.local_port}</TableCell>
+                                <TableCell>{client.remote_port}</TableCell>
+                                <TableCell>{client.server_addr}</TableCell>
+                                <TableCell className="text-right">
+                                    <div className="flex items-center justify-end gap-1">
                                         <ViewConfigDialog clientId={client.id} clientName={client.name}>
                                             <Button
                                                 type="button"
                                                 variant="outline"
                                                 size="icon"
                                                 className="h-8 w-8"
-                                                title={t('clients.config')}
+                                                title={t('clients.viewConfig')}
                                             >
                                                 <FileText className="h-4 w-4" />
                                             </Button>
@@ -237,22 +170,9 @@ export default function ClientListPage() {
                                                 <Edit3 className="h-4 w-4" />
                                             </Button>
                                         </EditClientDialog>
-                                        <ViewLogsDialog clientId={client.id} clientName={client.name}>
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                size="icon"
-                                                className="h-8 w-8"
-                                                title={t('clients.viewLogs')}
-                                            >
-                                                <ScrollText className="h-4 w-4" />
-                                            </Button>
-                                        </ViewLogsDialog>
 
-                                        {/* 分隔线 */}
                                         <div className="w-px h-6 bg-border mx-1" />
 
-                                        {/* 删除按钮 */}
                                         <AlertDialog>
                                             <AlertDialogTrigger asChild>
                                                 <Button
@@ -284,11 +204,11 @@ export default function ClientListPage() {
                                             </AlertDialogContent>
                                         </AlertDialog>
                                     </div>
-                            </TableCell>
-                        </TableRow>
-                    ))}
-                </TableBody>
-            </Table>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
             </div>
 
             {/* 移动端卡片视图 */}
@@ -297,15 +217,7 @@ export default function ClientListPage() {
                     <Card key={client.id}>
                         <CardContent className="p-4">
                             <div className="flex items-center justify-between mb-3">
-                                <div className="flex items-center space-x-2">
-                                    <Badge variant={getClientStatus(client) === "running" ? "default" : getClientStatus(client) === "stopped" ? "secondary" : "destructive"}>
-                                        {getClientStatus(client)}
-                                    </Badge>
-                                    <span className="font-medium">{client.name}</span>
-                                </div>
-                                {client.always_on && (
-                                    <Badge variant="outline" className="text-xs">Always-On</Badge>
-                                )}
+                                <span className="font-medium">{client.name}</span>
                             </div>
                             <div className="text-sm text-muted-foreground space-y-1 mb-4">
                                 <div>{t('clients.localPort')}: {client.local_port}</div>
@@ -313,24 +225,16 @@ export default function ClientListPage() {
                                 <div>{t('clients.serverAddress')}: {client.server_addr}</div>
                             </div>
                             <div className="flex flex-wrap gap-2">
-                                <Button variant="outline" size="sm" onClick={() => handleAction(client.id, 'start')}>
-                                    {t('clients.start')}
-                                </Button>
-                                <Button variant="outline" size="sm" onClick={() => handleAction(client.id, 'stop')}>
-                                    {t('clients.stop')}
-                                </Button>
-                                <Button variant="outline" size="sm" onClick={() => handleAction(client.id, 'restart')}>
-                                    {t('clients.restart')}
-                                </Button>
-                                <Button variant="outline" size="sm">
-                                    {t('clients.config')}
-                                </Button>
+                                <ViewConfigDialog clientId={client.id} clientName={client.name}>
+                                    <Button variant="outline" size="sm">
+                                        {t('clients.viewConfig')}
+                                    </Button>
+                                </ViewConfigDialog>
                                 <EditClientDialog client={client} onClientUpdated={fetchClients}>
                                     <Button variant="outline" size="sm">
                                         {t('clients.edit')}
                                     </Button>
                                 </EditClientDialog>
-                                <ViewLogsDialog clientId={client.id} clientName={client.name} />
                                 <AlertDialog>
                                     <AlertDialogTrigger asChild>
                                         <Button variant="destructive" size="sm">

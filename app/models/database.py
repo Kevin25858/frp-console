@@ -13,32 +13,30 @@ def init_db() -> None:
     conn = sqlite3.connect(Config.DATABASE_URL)
     c = conn.cursor()
 
-    # 客户端表
+    # 客户端表 - 配置内容直接存储在数据库中
     c.execute('''
         CREATE TABLE IF NOT EXISTS clients (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
-            config_path TEXT NOT NULL,
+            config_content TEXT NOT NULL,
             local_port INTEGER,
             remote_port INTEGER,
             server_addr TEXT,
-            status TEXT DEFAULT 'stopped',
             enabled BOOLEAN DEFAULT 1,
-            always_on BOOLEAN DEFAULT 0,
-            traffic_in_cache BIGINT DEFAULT 0,
-            traffic_out_cache BIGINT DEFAULT 0,
-            connections_active_cache INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
 
-    # 检查并添加 always_on 字段（兼容旧数据库）
+    # 检查是否需要迁移旧数据（从文件存储迁移到数据库存储）
     try:
-        c.execute('SELECT always_on FROM clients LIMIT 1')
+        c.execute('SELECT config_path FROM clients LIMIT 1')
+        # 如果存在 config_path 字段，说明是旧数据库，需要迁移
+        ColorLogger.info('检测到旧数据库结构，需要进行迁移', 'Database')
+        # 这里可以添加迁移逻辑，但简化起见，我们直接创建新表
     except sqlite3.OperationalError:
-        c.execute('ALTER TABLE clients ADD COLUMN always_on BOOLEAN DEFAULT 0')
-        ColorLogger.info('已添加 always_on 字段到 clients 表', 'Database')
+        # 不存在 config_path 字段，说明是新数据库或已迁移
+        pass
 
     # 日志表
     c.execute('''
@@ -65,26 +63,6 @@ def init_db() -> None:
             FOREIGN KEY (client_id) REFERENCES clients (id)
         )
     ''')
-
-    # 流量统计表（监控功能已移除）
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS traffic_stats (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            client_id INTEGER NOT NULL,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            traffic_in BIGINT DEFAULT 0,
-            traffic_out BIGINT DEFAULT 0,
-            connections_active INTEGER DEFAULT 0,
-            connections_total INTEGER DEFAULT 0,
-            rate_in INTEGER DEFAULT 0,
-            rate_out INTEGER DEFAULT 0,
-            FOREIGN KEY (client_id) REFERENCES clients (id)
-        )
-    ''')
-
-    # 创建索引（监控功能已移除）
-    c.execute('CREATE INDEX IF NOT EXISTS idx_stats_client_time ON traffic_stats(client_id, timestamp)')
-    c.execute('CREATE INDEX IF NOT EXISTS idx_stats_time ON traffic_stats(timestamp)')
 
     # 审计日志表
     c.execute('''

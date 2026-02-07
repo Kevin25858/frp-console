@@ -1,164 +1,220 @@
 #!/bin/bash
-#
 # FRP Console 一键安装脚本
-# FRP 客户端多开管理控制台
-#
+# 在同一台服务器上部署 Web 管理端和 frpc
 
 set -e
 
-RED=$'\033[0;31m'
-GREEN=$'\033[0;32m'
-YELLOW=$'\033[1;33m'
-NC=$'\033[0m'
+# 颜色输出
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
 
-log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
-log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
-log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+info() { echo -e "${GREEN}[INFO]${NC} $1"; }
+warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-APP_NAME="frpc-console"
-CONFIG_FILE="${APP_DIR}/frp-console.conf"
-SYSTEMD_FILE="/etc/systemd/system/${APP_NAME}.service"
-BINARY_NAME="frpc"
+# 配置
+INSTALL_DIR="/opt/frp-console"
+FRP_VERSION="0.52.3"
+ADMIN_PASSWORD=""
+API_TOKEN=""
 
-DEFAULT_PORT=7601
-DEFAULT_USER="admin"
-DEFAULT_PASS="ChangeMe123!@#"
+# 交互式配置
+echo "========================================"
+echo "  FRP Console 一键安装"
+echo "========================================"
+echo ""
 
-check_root() {
-    if [[ $EUID -ne 0 ]]; then
-        log_error "请使用 sudo 运行此脚本"
-        exit 1
-    fi
-}
+read -p "请输入管理员密码: " ADMIN_PASSWORD
+echo ""
+read -p "请输入 API Token (用于 frpc 认证): " API_TOKEN
+echo ""
+read -p "请输入服务端口 [默认7600]: " PORT
+PORT=${PORT:-7600}
+echo ""
 
-check_system() {
-    if [[ ! -f /etc/os-release ]]; then
-        log_error "不支持的系统"
-        exit 1
-    fi
-    
-    if ! command -v python3 &> /dev/null; then
-        log_info "安装 Python 3..."
-        apt-get update && apt-get install -y python3 python3-pip
-    fi
-    
-    if ! command -v wget &> /dev/null; then
-        apt-get install -y wget
-    fi
-}
+info "开始安装..."
 
-download_frpc() {
-    log_info "下载 FRPC 二进制..."
-    
-    ARCH=$(uname -m)
-    if [[ "$ARCH" == "x86_64" ]]; then
-        FRPC_URL="https://github.com/fatedier/frp/releases/download/v0.52.3/frp_0.52.3_linux_amd64.tar.gz"
-    elif [[ "$ARCH" == "aarch64" ]]; then
-        FRPC_URL="https://github.com/fatedier/frp/releases/download/v0.52.3/frp_0.52.3_linux_arm64.tar.gz"
-    else
-        log_warn "未知架构，使用 amd64"
-        FRPC_URL="https://github.com/fatedier/frp/releases/download/v0.52.3/frp_0.52.3_linux_amd64.tar.gz"
-    fi
-    
-    cd /tmp
-    wget -q "$FRPC_URL" -O frp.tar.gz
-    tar -xzf frp.tar.gz
-    mkdir -p ${APP_DIR}/frpc
-    mv frp_*/${BINARY_NAME} ${APP_DIR}/frpc/
-    chmod +x ${APP_DIR}/frpc/${BINARY_NAME}
-    rm -rf frp.tar.gz frp_*
-    
-    log_info "FRPC 下载完成"
-}
+# 1. 创建目录
+info "创建安装目录..."
+mkdir -p $INSTALL_DIR
+cd $INSTALL_DIR
 
-install_dependencies() {
-    log_info "安装 Python 依赖..."
-    pip3 install -q -r ${APP_DIR}/requirements.txt
-}
+# 2. 安装 Docker（如果没有）
+if ! command -v docker &> /dev/null; then
+    info "安装 Docker..."
+    curl -fsSL https://get.docker.com | sh
+    systemctl enable docker
+    systemctl start docker
+fi
 
-create_config() {
-    log_info "创建配置..."
-    
-    mkdir -p ${APP_DIR}/data ${APP_DIR}/logs ${APP_DIR}/clients
-    
-    if [[ ! -f "$CONFIG_FILE" ]]; then
-        cat > "$CONFIG_FILE" << EOF
-# FRP Console 配置文件
-PORT=${DEFAULT_PORT}
-ADMIN_USER=${DEFAULT_USER}
-ADMIN_PASSWORD=${DEFAULT_PASS}
-SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+if ! command -v docker-compose &> /dev/null; then
+    info "安装 Docker Compose..."
+    curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+    chmod +x /usr/local/bin/docker-compose
+fi
+
+# 3. 下载 frpc
+info "下载 frpc..."
+ARCH=$(uname -m)
+case $ARCH in
+    x86_64) FRP_ARCH="amd64" ;;
+    aarch64|arm64) FRP_ARCH="arm64" ;;
+    *) error "不支持的架构: $ARCH"; exit 1 ;;
+esac
+
+FRP_PACKAGE="frp_${FRP_VERSION}_linux_${FRP_ARCH}"
+FRP_TAR="${FRP_PACKAGE}.tar.gz"
+FRP_URL="https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/${FRP_TAR}"
+
+wget -q "$FRP_URL" -O /tmp/$FRP_TAR
+tar -xzf /tmp/$FRP_TAR -C /tmp
+cp "/tmp/${FRP_PACKAGE}/frpc" /usr/local/bin/frpc
+chmod +x /usr/local/bin/frpc
+rm -rf "/tmp/${FRP_PACKAGE}" "/tmp/${FRP_TAR}"
+
+# 4. 创建 docker-compose.yml
+info "创建 Docker Compose 配置..."
+cat > $INSTALL_DIR/docker-compose.yml << EOF
+version: '3.8'
+
+services:
+  frp-console:
+    image: ghcr.io/kevin25858/frp-console:latest
+    container_name: frp-console
+    restart: unless-stopped
+    ports:
+      - "${PORT}:7600"
+    environment:
+      - PORT=7600
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - SECRET_KEY=$(openssl rand -hex 32)
+      - API_TOKEN=${API_TOKEN}
+    volumes:
+      - ./data:/app/data
 EOF
-        chmod 600 "$CONFIG_FILE"
-        log_info "配置文件已创建: $CONFIG_FILE"
+
+# 5. 创建 frpc 配置同步脚本
+info "创建配置同步服务..."
+mkdir -p /etc/frp-client
+
+cat > /usr/local/bin/frpc-sync.sh << 'SCRIPT'
+#!/bin/bash
+CONFIG_FILE="/etc/frp-client/frpc.toml"
+TEMP_FILE="/etc/frp-client/frpc.toml.tmp"
+LOG_FILE="/var/log/frpc-sync.log"
+
+# 从 Web 端拉取配置
+fetch_config() {
+    # 获取第一个客户端的配置（简化版）
+    if ! curl -s -H "Authorization: Bearer ${API_TOKEN}" \
+         "http://localhost:${PORT}/api/configs/1/export" > "$TEMP_FILE" 2>/dev/null; then
+        echo "[$(date)] 拉取配置失败" >> "$LOG_FILE"
+        return 1
     fi
+    
+    # 检查配置是否有变化
+    if [[ -f "$CONFIG_FILE" ]] && diff -q "$CONFIG_FILE" "$TEMP_FILE" > /dev/null 2>&1; then
+        rm "$TEMP_FILE"
+        return 0
+    fi
+    
+    # 更新配置
+    mv "$TEMP_FILE" "$CONFIG_FILE"
+    echo "[$(date)] 配置已更新，重启 frpc" >> "$LOG_FILE"
+    
+    # 重启 frpc
+    systemctl restart frpc
+    
+    return 0
 }
 
-create_command() {
-    log_info "创建管理命令..."
-    
-    cp ${APP_DIR}/${APP_NAME} /usr/local/bin/${APP_NAME}
-    chmod +x /usr/local/bin/${APP_NAME}
-    
-    log_info "命令已安装: ${APP_NAME}"
-}
+fetch_config
+SCRIPT
+chmod +x /usr/local/bin/frpc-sync.sh
 
-create_service() {
-    log_info "创建系统服务..."
-    
-    cat > "$SYSTEMD_FILE" << EOF
+# 6. 创建 systemd 服务
+info "创建 frpc systemd 服务..."
+
+cat > /etc/systemd/system/frpc.service << EOF
 [Unit]
-Description=FRP Console - FRP Client Management Panel
+Description=FRP Client
 After=network.target
 
 [Service]
 Type=simple
-User=root
-WorkingDirectory=${APP_DIR}
-EnvironmentFile=${CONFIG_FILE}
-ExecStart=/usr/bin/python3 -m flask --app ${APP_DIR}/app/app.py run --host=0.0.0.0 --port=\${PORT}
+ExecStart=/usr/local/bin/frpc -c /etc/frp-client/frpc.toml
 Restart=always
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-    systemctl daemon-reload
-    systemctl enable ${APP_NAME}
-    
-    log_info "服务已配置"
-}
+cat > /etc/systemd/system/frpc-sync.service << EOF
+[Unit]
+Description=FRP Config Sync
+After=network.target
 
-main() {
-    echo "================================"
-    echo "  FRP Console 安装脚本"
-    echo "  FRP 客户端多开管理控制台"
-    echo "================================"
-    echo ""
-    
-    check_root
-    check_system
-    
-    if [[ ! -d "${APP_DIR}/frpc" ]]; then
-        download_frpc
-    fi
-    
-    install_dependencies
-    create_config
-    create_command
-    create_service
-    
-    echo ""
-    echo "================================"
-    log_info "安装完成!"
-    echo "================================"
-    echo ""
-    echo "启动控制台:"
-    echo "  ${APP_NAME}"
-    echo ""
-    echo "配置文件: $CONFIG_FILE"
-    echo ""
-}
+[Service]
+Type=oneshot
+Environment="API_TOKEN=${API_TOKEN}"
+Environment="PORT=${PORT}"
+ExecStart=/usr/local/bin/frpc-sync.sh
+EOF
 
-main "$@"
+cat > /etc/systemd/system/frpc-sync.timer << EOF
+[Unit]
+Description=FRP Config Sync Timer
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+
+[Install]
+WantedBy=timers.target
+EOF
+
+# 7. 启动 Web 端
+info "启动 Web 管理端..."
+docker-compose up -d
+
+# 等待 Web 端启动
+info "等待 Web 端启动..."
+sleep 5
+
+# 8. 首次拉取配置并启动 frpc
+info "初始化 frpc 配置..."
+API_TOKEN="${API_TOKEN}" PORT="${PORT}" /usr/local/bin/frpc-sync.sh || warn "首次拉取配置失败，将在定时任务中重试"
+
+# 9. 启动 frpc 服务
+info "启动 frpc 服务..."
+systemctl daemon-reload
+systemctl enable frpc
+systemctl enable frpc-sync.timer
+systemctl start frpc
+systemctl start frpc-sync.timer
+
+# 10. 完成
+echo ""
+echo "========================================"
+echo "  安装完成！"
+echo "========================================"
+echo ""
+echo "Web 管理界面: http://$(hostname -I | awk '{print $1}'):${PORT}"
+echo "用户名: admin"
+echo "密码: ${ADMIN_PASSWORD}"
+echo ""
+echo "管理命令:"
+echo "  查看 frpc 状态: systemctl status frpc"
+echo "  查看同步状态: systemctl status frpc-sync.timer"
+echo "  查看日志: journalctl -u frpc -f"
+echo "  重启 Web: cd ${INSTALL_DIR} && docker-compose restart"
+echo ""
+echo "注意:"
+echo "  - Web 端使用 Docker 运行"
+echo "  - frpc 使用 systemd 运行（独立于 Docker）"
+echo "  - Docker 重启不会影响 frpc"
+echo "  - 配置修改后约1分钟自动同步到 frpc"
+echo ""

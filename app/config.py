@@ -16,28 +16,29 @@ class Config:
     PORT = int(os.environ.get('PORT', 7600))
     SECRET_KEY = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
     
-    # 数据库配置
-    DATABASE_URL = os.environ.get(
-        'DATABASE_URL',
-        'sqlite:////opt/frp-console/data/frpc.db'
-    ).replace('sqlite:///', '')
+    # API Token 用于 frpc 拉取配置
+    API_TOKEN = os.environ.get('API_TOKEN')
 
     # 目录配置
     # 根据环境自动判断基础目录（容器内用 /app，宿主机用 /opt/frp-console）
-    # 支持 host 网络模式，通过检查多个路径来确定基础目录
-    if os.path.exists('/app/frpc/frpc'):
+    if os.path.exists('/app'):
         BASE_DIR = '/app'
-    elif os.path.exists('/opt/frp-console/frpc/frpc'):
+    elif os.path.exists('/opt/frp-console'):
         BASE_DIR = '/opt/frp-console'
     else:
         # 默认使用 /app，并创建必要的目录结构
         BASE_DIR = '/app'
-    
-    CONFIGS_DIR = os.path.join(BASE_DIR, 'clients')
+
     LOGS_DIR = os.path.join(BASE_DIR, 'logs')
     DATA_DIR = os.path.join(BASE_DIR, 'data')
-    FRPC_BINARY = os.path.join(BASE_DIR, 'frpc', 'frpc')
     CONFIG_FILE = os.path.join(BASE_DIR, 'frp-console.conf')
+
+    # 数据库配置
+    # 默认数据库路径跟随 BASE_DIR，允许通过环境变量覆盖
+    DATABASE_URL = os.environ.get(
+        'DATABASE_URL',
+        f'sqlite:///{DATA_DIR}/frpc.db'
+    ).replace('sqlite:///', '')
 
     # Session 配置
     PERMANENT_SESSION_LIFETIME = 86400  # 24小时
@@ -46,14 +47,6 @@ class Config:
     # 登录速率限制配置
     MAX_LOGIN_ATTEMPTS = 5
     LOGIN_LOCKOUT_TIME = 900  # 15分钟
-
-    # 重启管理配置
-    MAX_RESTARTS_PER_WINDOW = 3
-    RESTART_WINDOW = 300  # 5分钟
-    RESTART_COOLDOWN = 10  # 重启间隔10秒
-
-    # 健康检查配置
-    HEALTH_CHECK_INTERVAL = 10  # 10秒
 
     # 管理员配置
     ADMIN_USER = None
@@ -181,15 +174,20 @@ class Config:
                 'Security'
             )
 
+        # 检查 API_TOKEN
+        if not cls.API_TOKEN:
+            ColorLogger.warning(
+                '⚠️ 未设置 API_TOKEN 环境变量，frpc 将无法通过 API 拉取配置',
+                'Security'
+            )
+
         # 检查 SMTP 密码
         if not cls.SMTP_CONFIG['password']:
             ColorLogger.warning('未设置 SMTP_PASSWORD，告警功能将无法使用', 'SMTP')
 
         # 确保必要的目录存在
-        os.makedirs(cls.CONFIGS_DIR, exist_ok=True)
         os.makedirs(cls.LOGS_DIR, exist_ok=True)
         os.makedirs(cls.DATA_DIR, exist_ok=True)
-        os.makedirs(os.path.join(cls.LOGS_DIR, 'frpc'), exist_ok=True)
 
 
 # 初始化配置

@@ -14,6 +14,8 @@ services:
       # 安全提示：ADMIN_PASSWORD 和 SECRET_KEY 必须通过环境变量传入
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - SECRET_KEY=${SECRET_KEY}
+      # API Token 用于 frpc 拉取配置
+      - API_TOKEN=${API_TOKEN}
       - SMTP_HOST=${SMTP_HOST:-smtp.qq.com}
       - SMTP_PORT=${SMTP_PORT:-587}
       - SMTP_USER=${SMTP_USER}
@@ -25,11 +27,7 @@ services:
     volumes:
       # 持久化数据目录
       - ./data:/app/data
-      - ./clients:/app/clients
       - ./logs:/app/logs
-      - ./frp-console.conf:/app/frp-console.conf
-    # 使用 host 网络模式，让容器可以访问宿主机的 localhost
-    network_mode: host
     # 资源限制配置
     deploy:
       resources:
@@ -48,5 +46,4 @@ services:
 
 volumes:
   frp-data:
-  frp-clients:
   frp-logs:

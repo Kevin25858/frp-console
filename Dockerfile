@@ -25,8 +25,6 @@ WORKDIR /app
 # 安装系统依赖
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    wget \
-    procps \
     && rm -rf /var/lib/apt/lists/*
 
 # 复制 Python 依赖文件
@@ -40,13 +38,12 @@ COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
 # 复制应用代码
 COPY app/ ./app/
-COPY frpc/ ./frpc/
 
 # 创建必要的目录
-RUN mkdir -p clients data logs/frpc
+RUN mkdir -p data logs
 
 # 设置环境变量
-# 安全提示：ADMIN_PASSWORD 和 SECRET_KEY 必须通过环境变量传入，不要硬编码
+# 安全提示：ADMIN_PASSWORD、SECRET_KEY 和 API_TOKEN 必须通过环境变量传入，不要硬编码
 ENV PYTHONUNBUFFERED=1 \
     PORT=7600
 
