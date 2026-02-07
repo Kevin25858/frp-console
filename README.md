@@ -1,101 +1,74 @@
 # FRP Console
 
-> 一站式 FRPC 多客户端管理平台
+一个 Web 端的 FRPC 客户端管理工具。不用手动改配置文件，在浏览器里就能管理多个 FRPC 客户端。
 
-告别繁琐的命令行配置，通过 Web UI 统一管理多个 FRPC 客户端，
-实现可视化配置、批量管理、自动运维和实时监控。
+## 能做什么
 
-## 🎯 为什么选择 FRP Console？
+- 在网页上配置 FRPC，不用记参数
+- 一键启动、停止、重启客户端
+- 实时看日志，不用登录服务器
+- 客户端掉线自动邮件提醒
+
+## 和传统方式对比
 
 | 传统方式 | FRP Console |
 |---------|-------------|
-| 手动编辑 frpc.toml | 可视化表单配置 |
-| 逐个启动客户端 | 一键批量管理 |
-| 查看日志需登录服务器 | Web 端实时查看 |
-| 故障无法及时感知 | 自动告警通知 |
-| 配置分散难维护 | 集中式管理 |
+| 手动编辑 frpc.toml | 网页表单配置 |
+| 逐个启动客户端 | 批量管理 |
+| 看日志要登录服务器 | 浏览器直接看 |
+| 掉线了不知道 | 自动发邮件 |
 
-## ✨ 核心特性
+## 安装
 
-### 🖥️ 可视化配置管理
-- 表单化配置，无需记忆参数
-- 支持配置导入/导出
-- 多客户端集中管理
-
-### 🚀 自动化运维
-- 客户端自动启动/重启
-- 智能健康检查
-- 故障自动恢复
-
-### 📊 实时监控
-- 在线状态监控
-- 实时日志查看
-- 流量统计概览
-
-### 🔔 智能告警
-- 离线告警
-- 邮件通知
-- 告警历史记录
-
-## 🚀 快速开始
-
-### 使用 Docker 部署（推荐）
-
-**1. 拉取镜像**
+### Docker 部署
 
 ```bash
+# 拉取镜像
 docker pull ghcr.io/kevin25858/frp-console:latest
-```
 
-**2. 运行容器**
-
-将 `your_secure_password` 替换为你想要设置的管理员密码：
-
-```bash
+# 运行（把 your_password 换成你的密码）
 docker run -d --name frp-console -p 7600:7600 \
   -v /opt/frp-console/data:/app/data \
   -v /opt/frp-console/clients:/app/clients \
   -v /opt/frp-console/logs:/app/logs \
-  -e ADMIN_PASSWORD=your_secure_password \
+  -e ADMIN_PASSWORD=your_password \
   --restart unless-stopped \
   ghcr.io/kevin25858/frp-console:latest
 ```
 
-**3. 访问系统**
+然后访问 http://localhost:7600，用户名 admin，密码是你设置的。
 
-打开浏览器访问 http://localhost:7600
+### 更新
 
-- 用户名：admin
-- 密码：你设置的 `ADMIN_PASSWORD`
+```bash
+# 拉取最新镜像
+docker pull ghcr.io/kevin25858/frp-console:latest
 
-## 📖 功能说明
+# 停止并删除旧容器
+docker stop frp-console
+docker rm frp-console
 
-### 客户端管理
+# 重新运行（数据不会丢失）
+docker run -d --name frp-console -p 7600:7600 \
+  -v /opt/frp-console/data:/app/data \
+  -v /opt/frp-console/clients:/app/clients \
+  -v /opt/frp-console/logs:/app/logs \
+  -e ADMIN_PASSWORD=your_password \
+  --restart unless-stopped \
+  ghcr.io/kevin25858/frp-console:latest
+```
 
-- **添加客户端**：支持表单和配置粘贴两种方式
-- **编辑客户端**：修改客户端配置信息
-- **启动/停止/重启**：控制客户端运行状态
-- **查看日志**：实时查看客户端运行日志
-- **配置编辑**：直接编辑客户端配置文件
-- **删除客户端**：安全删除客户端及其相关数据
+注意：更新时加 `-e ADMIN_PASSWORD` 可以强制修改密码，不加则保留原来的密码。
 
-### 仪表板
+## 功能
 
-- 统计信息概览
-- 实时客户端状态
-
-### 告警系统
-
-- 邮件告警通知
-- 告警历史记录
-- 告警类型过滤
-
-### 设置
-
+- 添加/编辑/删除客户端
+- 启动/停止/重启客户端
+- 实时查看日志
+- 离线邮件告警
 - 修改管理员密码
-- 密码强度验证
 
-## 🔧 配置
+## 配置
 
 ### 环境变量
 
@@ -103,7 +76,7 @@ docker run -d --name frp-console -p 7600:7600 \
 |--------|------|--------|
 | `PORT` | 服务端口 | 7600 |
 | `ADMIN_USER` | 管理员用户名 | admin |
-| `ADMIN_PASSWORD` | 管理员密码 | admin123 |
+| `ADMIN_PASSWORD` | 管理员密码 | 随机生成 |
 | `SECRET_KEY` | Flask 密钥 | 随机生成 |
 | `SMTP_HOST` | SMTP 服务器 | smtp.qq.com |
 | `SMTP_PORT` | SMTP 端口 | 587 |
@@ -111,18 +84,9 @@ docker run -d --name frp-console -p 7600:7600 \
 | `SMTP_PASSWORD` | SMTP 密码 | - |
 | `ALERT_TO` | 告警接收邮箱 | - |
 
-### GitHub Container Registry
-
-本项目使用 GitHub Container Registry (ghcr.io) 托管 Docker 镜像：
-
-- **镜像地址**: `ghcr.io/kevin25858/frp-console:latest`
-- **标签格式**: `ghcr.io/kevin25858/frp-console:<commit-sha>`
-
-每次推送到 `main` 分支都会自动构建并推送最新镜像。
-
 ### 配置文件
 
-配置文件位于 `/opt/frp-console/frp-console.conf`：
+配置文件在 `/opt/frp-console/frp-console.conf`：
 
 ```ini
 PORT=7600
@@ -131,110 +95,63 @@ ADMIN_PASSWORD=ChangeMe123!@#
 SECRET_KEY=ChangeThisSecretKeyInProduction
 ```
 
-## 🏗️ 项目结构
+## 项目结构
 
 ```
 frp-console/
-├── app/                    # 后端应用
+├── app/                    # 后端
 │   ├── api/               # API 路由
-│   │   └── routes/        # 路由模块
-│   ├── services/          # 业务逻辑层
+│   ├── services/          # 业务逻辑
 │   ├── models/            # 数据模型
 │   ├── utils/             # 工具函数
-│   ├── static/            # 静态文件
-│   └── app.py             # 应用入口
-├── frontend/              # 前端应用
-│   ├── src/
-│   │   ├── components/    # React 组件
-│   │   ├── pages/         # 页面组件
-│   │   ├── lib/           # 工具库
-│   │   ├── contexts/      # React Context
-│   │   └── types/         # TypeScript 类型
-│   └── package.json
-├── .github/workflows/     # GitHub Actions CI/CD
-│   └── ci.yml             # CI/CD 配置
-├── clients/               # 客户端配置文件
-├── data/                  # 数据库文件
-├── logs/                  # 日志文件
-├── frpc/                  # FRPC 二进制文件
-├── Dockerfile             # Docker 构建文件
-├── docker-compose.yml     # Docker Compose 配置
-└── requirements.txt       # Python 依赖
+│   └── app.py             # 入口
+├── frontend/              # 前端
+│   └── src/
+├── clients/               # 客户端配置
+├── data/                  # 数据库
+├── logs/                  # 日志
+├── Dockerfile
+└── requirements.txt
 ```
 
-## 🔐 安全性
+## 安全
 
 - CSRF 保护
-- 登录速率限制
+- 登录限制
 - Session 管理
-- 密码复杂度验证（Zod）
+- 密码强度检查
 
-## 🔄 CI/CD
-
-本项目使用 GitHub Actions 实现自动化构建和部署：
-
-### 工作流说明
-
-| 任务 | 说明 | 触发条件 |
-|------|------|----------|
-| **Backend Tests** | Python 后端测试和代码检查 | Push / PR |
-| **Frontend Tests** | 前端 TypeScript 检查和测试 | Push / PR |
-| **Security Scan** | Trivy 安全漏洞扫描 | Push / PR |
-| **Build** | Docker 镜像构建 | Push / PR |
-| **Deploy** | 推送镜像到 ghcr.io | Push to main |
-
-### 镜像地址
-
-- **最新版本**: `ghcr.io/kevin25858/frp-console:latest`
-
-查看 [Actions](https://github.com/Kevin25858/frp-console/actions) 页面了解构建状态。
-
-## 📝 API 文档
+## API
 
 ### 认证
+- `POST /login` - 登录
+- `GET /logout` - 登出
 
-- `POST /login` - 用户登录
-- `GET /logout` - 用户登出
+### 客户端
+- `GET /api/clients` - 列表
+- `POST /api/clients` - 创建
+- `GET /api/clients/<id>` - 详情
+- `PUT /api/clients/<id>` - 更新
+- `DELETE /api/clients/<id>` - 删除
+- `POST /api/clients/<id>/start` - 启动
+- `POST /api/clients/<id>/stop` - 停止
+- `POST /api/clients/<id>/restart` - 重启
+- `GET /api/clients/<id>/logs` - 日志
 
-### 客户端管理
-
-- `GET /api/clients` - 获取客户端列表
-- `POST /api/clients` - 创建客户端
-- `GET /api/clients/<id>` - 获取客户端详情
-- `PUT /api/clients/<id>` - 更新客户端
-- `DELETE /api/clients/<id>` - 删除客户端
-- `POST /api/clients/<id>/start` - 启动客户端
-- `POST /api/clients/<id>/stop` - 停止客户端
-- `POST /api/clients/<id>/restart` - 重启客户端
-- `GET /api/clients/<id>/config` - 获取配置
-- `PUT /api/clients/<id>/config` - 更新配置
-- `GET /api/clients/<id>/logs` - 获取日志
-
-### 告警
-
-- `GET /api/alerts` - 获取告警列表
-
-### 管理员
-
-- `POST /api/change-password` - 修改密码
-
-## 🤝 贡献
-
-欢迎贡献代码！请遵循以下步骤：
+## 参与贡献
 
 1. Fork 项目
-2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 开启 Pull Request
+2. 创建分支 `git checkout -b feature/xxx`
+3. 提交 `git commit -m 'Add xxx'`
+4. 推送 `git push origin feature/xxx`
+5. 提 Pull Request
 
-## 📄 许可证
+## 许可证
 
-本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情
+MIT
 
-## 🙏 致谢
+## 感谢
 
 - [FRP](https://github.com/fatedier/frp) - Fast Reverse Proxy
-- [Flask](https://flask.palletsprojects.com/) - Python Web 框架
-- [React](https://react.dev/) - React 框架
-- [shadcn/ui](https://ui.shadcn.com/) - UI 组件库
+- [Flask](https://flask.palletsprojects.com/)
+- [React](https://react.dev/)
