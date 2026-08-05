@@ -39,9 +39,23 @@ else
     echo "   ⚠️  钩子目录不存在: $HOOKS_DIR"
 fi
 
-# 4. 设置 Git 使用本地钩子目录（可选）
+# 4. 设置 Git 使用本地钩子目录
 echo "4. 配置 Git 使用本地钩子..."
-git config core.hooksPath .githooks 2>/dev/null || true
+git config core.hooksPath .githooks
+
+# 5. 禁止 Git 自动猜测作者身份
+echo "5. 禁止 Git 自动猜测作者身份..."
+git config user.useConfigOnly true
+
+# 6. 设置新仓库初始模板（携带提交规范钩子）
+echo "6. 设置新仓库初始模板..."
+mkdir -p ~/.gitinit
+for hook in "$HOOKS_DIR"/*; do
+    hook_name=$(basename "$hook")
+    cp "$hook" ~/.gitinit/"$hook_name"
+    chmod +x ~/.gitinit/"$hook_name"
+done
+git config --global init.templateDir ~/.gitinit
 
 echo ""
 echo "✅ 设置完成！"
