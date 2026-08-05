@@ -1,0 +1,38 @@
+services:
+  frp-console:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: frp-console
+    restart: unless-stopped
+    ports:
+      - "${PORT:-7600}:7600"
+    env_file:
+      - .env
+    environment:
+      - PORT=${PORT:-7600}
+      - TZ=${TZ:-Asia/Shanghai}
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
+      - /run/systemd:/run/systemd:ro
+      - /var/log/journal:/var/log/journal
+      - /etc/machine-id:/etc/machine-id:ro
+      - /etc/frp-client:/etc/frp-client
+    security_opt:
+      - apparmor=unconfined
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:7600/login')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s

@@ -1,0 +1,17 @@
+#!/bin/bash
+# commit-msg hook - 检查提交消息
+
+COMMIT_MSG_FILE="$1"
+
+# 检查提交消息中是否包含 Co-Authored-By
+if grep -qE "^Co-Authored-By:" "$COMMIT_MSG_FILE"; then
+    echo "❌ 提交被拒绝！"
+    echo ""
+    echo "提交消息中包含 Co-Authored-By，这是不允许的。"
+    echo "根据项目规范，所有提交必须只有 Kevin25858 一个作者。"
+    echo ""
+    echo "请编辑提交消息，删除 Co-Authored-By 行后重试。"
+    exit 1
+fi
+
+exit 0

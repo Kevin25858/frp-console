@@ -1,0 +1,86 @@
+name: Bug 报告
+description: 报告一个 bug
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢你的 bug 报告！请填写以下信息帮助我们更快地定位和修复问题。
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述
+      description: 清晰简洁地描述问题
+      placeholder: 发生了什么？
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 复现步骤
+      description: 如何复现这个问题
+      placeholder: |
+        1. 进入 '...'
+        2. 点击 '...'
+        3. 滚动到 '...'
+        4. 看到错误
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为
+      description: 描述你期望发生什么
+      placeholder: 应该发生什么
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为
+      description: 描述实际发生了什么
+      placeholder: 实际发生了什么
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: 截图
+      description: 如果适用，请添加截图帮助说明问题
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: 环境信息
+      description: 请提供你的环境信息
+      placeholder: |
+        - OS: [例如 Ubuntu 22.04]
+        - Python Version: [例如 3.12]
+        - Node.js Version: [例如 20]
+        - Browser: [例如 Chrome 120]
+        - Docker Version: [例如 24.0]
+        - FRP Console Version: [例如 v1.0.0]
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志
+      description: 请提供相关的日志输出
+      render: shell
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: 确认事项
+      options:
+        - label: 我已经搜索过现有的 issues，确认这个问题没有被报告过
+          required: true
+        - label: 我已经尝试过最新版本，问题仍然存在
+          required: true

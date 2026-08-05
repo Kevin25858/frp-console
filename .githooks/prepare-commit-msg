@@ -1,0 +1,16 @@
+#!/bin/bash
+# prepare-commit-msg hook - 准备提交消息时移除 Co-Authored-By
+
+COMMIT_MSG_FILE="$1"
+SOURCE="$2"
+
+# 如果是模板消息（如 git commit -m），检查并移除 Co-Authored-By
+if [ -f "$COMMIT_MSG_FILE" ]; then
+    # 移除包含 Co-Authored-By 的行
+    if grep -qE "^Co-Authored-By:" "$COMMIT_MSG_FILE"; then
+        # 使用 sed 移除 Co-Authored-By 行
+        sed -i '/^Co-Authored-By:/d' "$COMMIT_MSG_FILE"
+    fi
+fi
+
+exit 0
