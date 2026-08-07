@@ -59,11 +59,12 @@ export function ViewLogsDialog({ clientId, clientName, children }: ViewLogsDialo
     }, [logs]);
 
     // 日志级别内联 SVG 图标（lucide 同款路径，避免 emoji）
-    const ICONS = {
-        error: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>',
-        warn: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>',
-        info: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
-        debug: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" fill="currentColor"/></svg>',
+    // 显式设置 width/height，防止 CSS 失效时按默认尺寸渲染成巨大图标
+    const LEVEL_ICONS: Record<string, string> = {
+        error: '<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>',
+        warn: '<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>',
+        info: '<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
+        debug: '<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" fill="currentColor"/></svg>',
     };
 
     const processLogs = (logContent: string): string => {
@@ -85,19 +86,19 @@ export function ViewLogsDialog({ clientId, clientName, children }: ViewLogsDialo
             // 级别标记替换为带颜色的图标
             html = html.replace(
                 /\[E\]/g,
-                `<span class="log-level log-level-error">${ICONS.error}</span>`
+                `<span class="log-level log-level-error">${LEVEL_ICONS.error}</span>`
             );
             html = html.replace(
                 /\[W\]/g,
-                `<span class="log-level log-level-warn">${ICONS.warn}</span>`
+                `<span class="log-level log-level-warn">${LEVEL_ICONS.warn}</span>`
             );
             html = html.replace(
                 /\[I\]/g,
-                `<span class="log-level log-level-info">${ICONS.info}</span>`
+                `<span class="log-level log-level-info">${LEVEL_ICONS.info}</span>`
             );
             html = html.replace(
                 /\[D\]/g,
-                `<span class="log-level log-level-debug">${ICONS.debug}</span>`
+                `<span class="log-level log-level-debug">${LEVEL_ICONS.debug}</span>`
             );
 
             // 高亮时间戳 (journal 格式: May 01 19:04:45)
