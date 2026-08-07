@@ -159,36 +159,41 @@ export default function ClientListPage() {
                                 <TableCell>{client.server_addr}</TableCell>
                                 <TableCell className="text-right">
                                     <div className="flex items-center justify-end gap-1">
-                                        {/* 启动/停止/重启按钮 - 始终显示 */}
-                                        <Button
-                                            variant="outline"
-                                            size="icon"
-                                            className="h-8 w-8 text-green-600 hover:bg-green-50 hover:text-green-700 border-green-200"
-                                            onClick={() => handleClientAction(client, 'start')}
-                                            disabled={client.status === 'running'}
-                                            title="启动"
-                                        >
-                                            <Play className="h-4 w-4" />
-                                        </Button>
-                                        <Button
-                                            variant="outline"
-                                            size="icon"
-                                            className="h-8 w-8 text-orange-600 hover:bg-orange-50 hover:text-orange-700 border-orange-200"
-                                            onClick={() => handleClientAction(client, 'stop')}
-                                            disabled={client.status !== 'running'}
-                                            title="停止"
-                                        >
-                                            <Square className="h-4 w-4" />
-                                        </Button>
-                                        <Button
-                                            variant="outline"
-                                            size="icon"
-                                            className="h-8 w-8 text-blue-600 hover:bg-blue-50 hover:text-blue-700 border-blue-200"
-                                            onClick={() => handleClientAction(client, 'restart')}
-                                            title="重启"
-                                        >
-                                            <RotateCcw className="h-4 w-4" />
-                                        </Button>
+                                        {/* 启动按钮 - 仅在未运行时显示 */}
+                                        {client.status !== 'running' && (
+                                            <Button
+                                                variant="outline"
+                                                size="icon"
+                                                className="h-8 w-8 text-green-600 hover:bg-green-50 hover:text-green-700 border-green-200"
+                                                onClick={() => handleClientAction(client, 'start')}
+                                                title="启动"
+                                            >
+                                                <Play className="h-4 w-4" />
+                                            </Button>
+                                        )}
+                                        {/* 停止/重启按钮 - 仅在运行时显示 */}
+                                        {client.status === 'running' && (
+                                            <>
+                                                <Button
+                                                    variant="outline"
+                                                    size="icon"
+                                                    className="h-8 w-8 text-orange-600 hover:bg-orange-50 hover:text-orange-700 border-orange-200"
+                                                    onClick={() => handleClientAction(client, 'stop')}
+                                                    title="停止"
+                                                >
+                                                    <Square className="h-4 w-4" />
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    size="icon"
+                                                    className="h-8 w-8 text-blue-600 hover:bg-blue-50 hover:text-blue-700 border-blue-200"
+                                                    onClick={() => handleClientAction(client, 'restart')}
+                                                    title="重启"
+                                                >
+                                                    <RotateCcw className="h-4 w-4" />
+                                                </Button>
+                                            </>
+                                        )}
 
                                         <div className="w-px h-6 bg-border mx-1" />
 
@@ -285,36 +290,41 @@ export default function ClientListPage() {
                                 <div>服务器地址: {client.server_addr}</div>
                             </div>
                             <div className="flex flex-wrap gap-2">
-                                {/* 移动端启动/停止/重启按钮 - 始终显示 */}
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="text-green-600 hover:bg-green-50 border-green-200"
-                                    onClick={() => handleClientAction(client, 'start')}
-                                    disabled={client.status === 'running'}
-                                >
-                                    <Play className="h-4 w-4 mr-1" />
-                                    启动
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="text-orange-600 hover:bg-orange-50 border-orange-200"
-                                    onClick={() => handleClientAction(client, 'stop')}
-                                    disabled={client.status !== 'running'}
-                                >
-                                    <Square className="h-4 w-4 mr-1" />
-                                    停止
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="text-blue-600 hover:bg-blue-50 border-blue-200"
-                                    onClick={() => handleClientAction(client, 'restart')}
-                                >
-                                    <RotateCcw className="h-4 w-4 mr-1" />
-                                    重启
-                                </Button>
+                                    {/* 启动按钮 - 仅在未运行时显示 */}
+                                    {client.status !== 'running' && (
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="text-green-600 hover:bg-green-50 border-green-200"
+                                            onClick={() => handleClientAction(client, 'start')}
+                                        >
+                                            <Play className="h-4 w-4 mr-1" />
+                                            启动
+                                        </Button>
+                                    )}
+                                    {/* 停止/重启按钮 - 仅在运行时显示 */}
+                                    {client.status === 'running' && (
+                                        <>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="text-orange-600 hover:bg-orange-50 border-orange-200"
+                                                onClick={() => handleClientAction(client, 'stop')}
+                                            >
+                                                <Square className="h-4 w-4 mr-1" />
+                                                停止
+                                            </Button>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="text-blue-600 hover:bg-blue-50 border-blue-200"
+                                                onClick={() => handleClientAction(client, 'restart')}
+                                            >
+                                                <RotateCcw className="h-4 w-4 mr-1" />
+                                                重启
+                                            </Button>
+                                        </>
+                                    )}
                                 <ViewConfigDialog clientId={client.id} clientName={client.name}>
                                     <Button variant="outline" size="sm">
                                         配置
