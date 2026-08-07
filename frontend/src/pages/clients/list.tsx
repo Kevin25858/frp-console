@@ -28,13 +28,14 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog.tsx";
-import { FileText, Trash2, Play, Square, RotateCcw, ScrollText, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { FileText, Trash2, Play, Square, RotateCcw, ScrollText, CheckCircle2, XCircle, AlertCircle, Loader2 } from "lucide-react";
 import type { Client } from "@/types";
 
 export default function ClientListPage() {
     const { data: clients, isLoading, error, fetchData: fetchClients } = useApi<Client[]>("/clients");
     const { success, error: toastError } = useToast();
     const [searchTerm, setSearchTerm] = useState("");
+    const [actionLoading, setActionLoading] = useState<{ id: number; action: string } | null>(null);
     const abortControllerRef = useRef<AbortController | null>(null);
     const isFetchingRef = useRef(false);
 
@@ -74,6 +75,7 @@ export default function ClientListPage() {
     // 客户端启动/停止/重启
     const handleClientAction = async (client: Client, action: 'start' | 'stop' | 'restart') => {
         const actionLabel = { start: '启动', stop: '停止', restart: '重启' }[action];
+        setActionLoading({ id: client.id, action });
         try {
             await apiFetch(`/clients/${client.id}/${action}`, {
                 method: 'POST',
@@ -83,8 +85,17 @@ export default function ClientListPage() {
         } catch (error) {
             console.error(`Failed to ${action} client ${client.id}:`, error);
             toastError(`${actionLabel}失败`);
+        } finally {
+            setActionLoading(null);
         }
     };
+
+    // 判断指定按钮是否处于加载中
+    const isActionLoading = (client: Client, action: 'start' | 'stop' | 'restart') =>
+        actionLoading?.id === client.id && actionLoading?.action === action;
+
+    // 加载中显示的旋转图标
+    const LoadingIcon = () => <Loader2 className="h-4 w-4 animate-spin" />;
 
     const handleDelete = async (clientId: number) => {
         try {
@@ -166,9 +177,10 @@ export default function ClientListPage() {
                                                 size="icon"
                                                 className="h-8 w-8 text-green-600 hover:bg-green-50 hover:text-green-700 border-green-200"
                                                 onClick={() => handleClientAction(client, 'start')}
+                                                disabled={isActionLoading(client, 'start')}
                                                 title="启动"
                                             >
-                                                <Play className="h-4 w-4" />
+                                                {isActionLoading(client, 'start') ? <LoadingIcon /> : <Play className="h-4 w-4" />}
                                             </Button>
                                         )}
                                         {/* 停止/重启按钮 - 仅在运行时显示 */}
@@ -179,18 +191,20 @@ export default function ClientListPage() {
                                                     size="icon"
                                                     className="h-8 w-8 text-orange-600 hover:bg-orange-50 hover:text-orange-700 border-orange-200"
                                                     onClick={() => handleClientAction(client, 'stop')}
+                                                    disabled={isActionLoading(client, 'stop')}
                                                     title="停止"
                                                 >
-                                                    <Square className="h-4 w-4" />
+                                                    {isActionLoading(client, 'stop') ? <LoadingIcon /> : <Square className="h-4 w-4" />}
                                                 </Button>
                                                 <Button
                                                     variant="outline"
                                                     size="icon"
                                                     className="h-8 w-8 text-blue-600 hover:bg-blue-50 hover:text-blue-700 border-blue-200"
                                                     onClick={() => handleClientAction(client, 'restart')}
+                                                    disabled={isActionLoading(client, 'restart')}
                                                     title="重启"
                                                 >
-                                                    <RotateCcw className="h-4 w-4" />
+                                                    {isActionLoading(client, 'restart') ? <LoadingIcon /> : <RotateCcw className="h-4 w-4" />}
                                                 </Button>
                                             </>
                                         )}
@@ -297,8 +311,9 @@ export default function ClientListPage() {
                                             size="sm"
                                             className="text-green-600 hover:bg-green-50 border-green-200"
                                             onClick={() => handleClientAction(client, 'start')}
+                                            disabled={isActionLoading(client, 'start')}
                                         >
-                                            <Play className="h-4 w-4 mr-1" />
+                                            {isActionLoading(client, 'start') ? <LoadingIcon /> : <Play className="h-4 w-4 mr-1" />}
                                             启动
                                         </Button>
                                     )}
@@ -310,8 +325,9 @@ export default function ClientListPage() {
                                                 size="sm"
                                                 className="text-orange-600 hover:bg-orange-50 border-orange-200"
                                                 onClick={() => handleClientAction(client, 'stop')}
+                                                disabled={isActionLoading(client, 'stop')}
                                             >
-                                                <Square className="h-4 w-4 mr-1" />
+                                                {isActionLoading(client, 'stop') ? <LoadingIcon /> : <Square className="h-4 w-4 mr-1" />}
                                                 停止
                                             </Button>
                                             <Button
@@ -319,8 +335,9 @@ export default function ClientListPage() {
                                                 size="sm"
                                                 className="text-blue-600 hover:bg-blue-50 border-blue-200"
                                                 onClick={() => handleClientAction(client, 'restart')}
+                                                disabled={isActionLoading(client, 'restart')}
                                             >
-                                                <RotateCcw className="h-4 w-4 mr-1" />
+                                                {isActionLoading(client, 'restart') ? <LoadingIcon /> : <RotateCcw className="h-4 w-4 mr-1" />}
                                                 重启
                                             </Button>
                                         </>
