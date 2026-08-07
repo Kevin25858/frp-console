@@ -3,6 +3,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # npm 镜像源（国内可设为 https://registry.npmmirror.com 加速）
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
     container_name: frp-console
     restart: unless-stopped
     ports:

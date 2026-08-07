@@ -21,7 +21,6 @@ set -e
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIGS_DIR="/opt/frpc"
 CONFIG_OWNER="1000:1000"          # 容器内 appuser 的 UID:GID
-PORT_DFLT=7600
 
 AUTO_YES=""
 SKIP_DOCKER=""
@@ -213,13 +212,22 @@ ensure_placeholder "API_TOKEN" "$(gen_secret 16)"
 ensure_placeholder "ADMIN_PASSWORD" "$(gen_secret 24)"
 log OK "密钥/密码已生成（见 .env）"
 
-# 固定 DOCKER_GID
-GID_DOCKER=$(stat -c '%g' /var/run/docker.sock 2>/dev/null || echo "0")
-if [ "$GID_DOCKER" = "0" ] || [ -z "$GID_DOCKER" ]; then
-    GID_DOCKER="$(getent group docker 2>/dev/null | cut -d: -f3 || echo 999)"
+# 固定 DOCKER_GID（优先取 socket 属组，其次 docker 组，最后兜底）
+GID_DOCKER=$(stat -c '%g' /var/run/docker.sock 2>/dev/null || echo "")
+if [ -z "$GID_DOCKER" ] || [ "$GID_DOCKER" = "0" ]; then
+    GID_DOCKER="$(getent group docker 2>/dev/null | cut -d: -f3 || echo "")"
 fi
-ensure_env "DOCKER_GID" "999"
-sed -i "s/^DOCKER_GID=.*/DOCKER_GID=${GID_DOCKER}/" .env
+[ -z "$GID_DOCKER" ] && GID_DOCKER="988"
+ensure_env "DOCKER_GID" "$GID_DOCKER"
+# 若已有值但为空/无效，则覆写为探测值
+cur_gid=$(grep -E "^DOCKER_GID=" .env | tail -1 | cut -d= -f2- | tr -d '[:space:]')
+if [ -z "$cur_gid" ] || [ "$cur_gid" = "0" ] || [ "$cur_gid" = "999" ]; then
+    if [ "$(uname)" = "Darwin" ]; then
+        sed -i '' "s/^DOCKER_GID=.*/DOCKER_GID=${GID_DOCKER}/" .env
+    else
+        sed -i "s/^DOCKER_GID=.*/DOCKER_GID=${GID_DOCKER}/" .env
+    fi
+fi
 log OK "docker 组 GID = $GID_DOCKER"
 
 # ==================== 4. 配置目录 /opt/frpc ====================
