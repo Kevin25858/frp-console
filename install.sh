@@ -1,312 +1,290 @@
 #!/bin/bash
-# FRP Console 一键安装脚本
-# 在同一台服务器上部署 Web 管理端和 frpc
-
+# ============================================================
+# FRP Console 一键安装脚本（通用 Linux 版）
+#
+# 特性：
+#   - 自动检测发行版并安装 Docker / Docker Compose（也可跳过）
+#   - 宿主机无需 Node/npm（前端在容器内多阶段构建）
+#   - 自动创建 /opt/frpc 配置目录并设置属主
+#   - 自动生成安全的 .env（随机 SECRET_KEY / API_TOKEN）
+#   - 自动获取 docker 组 GID 写入 .env
+#   - 构建启动容器，等待健康检查，打印访问信息
+#
+# 用法：
+#   bash install.sh             # 交互式
+#   bash install.sh --no-docker # 宿主机已装 Docker，跳过安装
+#   bash install.sh --yes       # 所有确认默认为是
+# ============================================================
 set -e
 
-# 颜色输出
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
+# ==================== 配置 ====================
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIGS_DIR="/opt/frpc"
+CONFIG_OWNER="1000:1000"          # 容器内 appuser 的 UID:GID
+PORT_DFLT=7600
 
-info() { echo -e "${GREEN}[INFO]${NC} $1"; }
-warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
-error() { echo -e "${RED}[ERROR]${NC} $1"; }
+AUTO_YES=""
+SKIP_DOCKER=""
 
-# 配置
-INSTALL_DIR="/opt/frp-console"
-FRP_VERSION="0.52.3"
-ADMIN_PASSWORD=""
-API_TOKEN=""
+# ==================== 颜色 & 工具 ====================
+RED='\033[91m'; GREEN='\033[92m'; YELLOW='\033[93m'; CYAN='\033[96m'; DIM='\033[2m'; RESET='\033[0m'
 
-# 下载函数（带重试和镜像源）
-download_with_retry() {
-    local url=$1
-    local output=$2
-    local max_retries=3
-    local retry_count=0
-    
-    while [ $retry_count -lt $max_retries ]; do
-        if curl -fsSL --connect-timeout 30 --max-time 120 "$url" -o "$output" 2>/dev/null; then
-            return 0
-        fi
-        retry_count=$((retry_count + 1))
-        warn "下载失败，第 $retry_count 次重试..."
-        sleep 2
-    done
-    return 1
-}
+log() { local l="$1" m="$2" c=""; case "$l" in INFO)c="$CYAN";;OK)c="$GREEN";;WARN)c="$YELLOW";;ERR)c="$RED";;esac; echo "${DIM}[$(date '+%H:%M:%S')]${RESET} ${c}[${l}]${RESET} ${m}"; }
+die() { log ERR "$1"; exit 1; }
 
-# 从多个源下载文件
-download_from_mirrors() {
-    local filename=$1
-    local output=$2
-    
-    # 镜像源列表
-    local mirrors=(
-        "https://raw.githubusercontent.com/Kevin25858/frp-console/main/$filename"
-        "https://cdn.jsdelivr.net/gh/Kevin25858/frp-console@main/$filename"
-        "https://ghproxy.com/https://raw.githubusercontent.com/Kevin25858/frp-console/main/$filename"
-        "https://mirror.ghproxy.com/https://raw.githubusercontent.com/Kevin25858/frp-console/main/$filename"
-    )
-    
-    for mirror in "${mirrors[@]}"; do
-        info "尝试从 $mirror 下载..."
-        if download_with_retry "$mirror" "$output"; then
-            info "下载成功！"
-            return 0
-        fi
-    done
-    
-    error "所有镜像源都下载失败"
-    return 1
-}
-
-# 交互式配置
-echo "========================================"
-echo "  FRP Console 一键安装"
-echo "========================================"
-echo ""
-
-read -p "请输入管理员密码 [留空则自动生成]: " ADMIN_PASSWORD
-echo ""
-read -p "请输入服务端口 [默认7600]: " PORT
-PORT=${PORT:-7600}
-echo ""
-
-# 自动生成密码和 Token
-if [ -z "$ADMIN_PASSWORD" ]; then
-    ADMIN_PASSWORD=$(openssl rand -base64 16 | tr -d '=+/')
-    info "已生成管理员密码: $ADMIN_PASSWORD"
-fi
-
-API_TOKEN=$(openssl rand -hex 32)
-info "已生成 API Token: $API_TOKEN"
-
-info "开始安装..."
-
-# 1. 创建目录
-info "创建安装目录..."
-mkdir -p $INSTALL_DIR
-cd $INSTALL_DIR
-
-# 2. 安装 Docker（如果没有）
-if ! command -v docker &> /dev/null; then
-    info "安装 Docker..."
-    # 尝试多个 Docker 安装脚本镜像
-    if ! curl -fsSL https://get.docker.com | sh 2>/dev/null; then
-        warn "官方脚本失败，尝试镜像..."
-        curl -fsSL https://mirror.ghproxy.com/https://raw.githubusercontent.com/docker/docker-install/master/install.sh | sh
+# Root 检测：若非 root，尝试用 sudo 包裹需要提权的命令
+use_sudo() {
+    if [ "$(id -u)" -eq 0 ]; then
+        echo ""
+    else
+        echo "sudo"
     fi
-    systemctl enable docker
-    systemctl start docker
-fi
+}
+SUDO="$(use_sudo)"
+need_sudo() { [ -n "$SUDO" ]; }
 
-if ! command -v docker-compose &> /dev/null; then
-    info "安装 Docker Compose..."
-    # 尝试多个镜像源
-    if ! curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose 2>/dev/null; then
-        curl -L "https://ghproxy.com/https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-    fi
-    chmod +x /usr/local/bin/docker-compose
-fi
-
-# 3. 下载 docker-compose.yml
-info "下载配置文件..."
-if ! download_from_mirrors "docker-compose.yml" "$INSTALL_DIR/docker-compose.yml"; then
-    error "无法下载 docker-compose.yml"
-    exit 1
-fi
-
-# 替换配置
-sed -i "s/your_password/$ADMIN_PASSWORD/g" "$INSTALL_DIR/docker-compose.yml"
-sed -i "s/your_secret_key/$(openssl rand -hex 32)/g" "$INSTALL_DIR/docker-compose.yml"
-sed -i "s/your_api_token/$API_TOKEN/g" "$INSTALL_DIR/docker-compose.yml"
-sed -i "s/7600:7600/$PORT:7600/g" "$INSTALL_DIR/docker-compose.yml"
-
-# 4. 安装 frpc
-info "安装 frpc..."
-
-# 优先使用本地文件
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-if [ -f "$SCRIPT_DIR/bin/frpc" ]; then
-    info "使用本地 frpc 文件..."
-    cp "$SCRIPT_DIR/bin/frpc" /usr/local/bin/frpc
-elif [ -f "bin/frpc" ]; then
-    info "使用本地 frpc 文件..."
-    cp "bin/frpc" /usr/local/bin/frpc
-else
-    # 尝试下载
-    ARCH=$(uname -m)
-    case $ARCH in
-        x86_64) FRP_ARCH="amd64" ;;
-        aarch64|arm64) FRP_ARCH="arm64" ;;
-        *) error "不支持的架构: $ARCH"; exit 1 ;;
+# 解析参数
+for arg in "$@"; do
+    case "$arg" in
+        --yes|-y) AUTO_YES=1 ;;
+        --no-docker|--skip-docker) SKIP_DOCKER=1 ;;
+        --help|-h)
+            sed -n '3,14p' "${BASH_SOURCE[0]}" | sed 's/^# //;s/^#//'
+            exit 0 ;;
     esac
-
-    FRP_PACKAGE="frp_${FRP_VERSION}_linux_${FRP_ARCH}"
-    FRP_TAR="${FRP_PACKAGE}.tar.gz"
-
-    # 尝试多个镜像源下载 frp
-    frp_mirrors=(
-        "https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/${FRP_TAR}"
-        "https://ghproxy.com/https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/${FRP_TAR}"
-        "https://mirror.ghproxy.com/https://github.com/fatedier/frp/releases/download/v${FRP_VERSION}/${FRP_TAR}"
-    )
-
-    FRP_DOWNLOADED=false
-    for mirror in "${frp_mirrors[@]}"; do
-        info "尝试从 $mirror 下载 frp..."
-        if download_with_retry "$mirror" "/tmp/$FRP_TAR"; then
-            FRP_DOWNLOADED=true
-            break
-        fi
-    done
-
-    if [ "$FRP_DOWNLOADED" = false ]; then
-        error "无法下载 frpc"
-        exit 1
-    fi
-
-    tar -xzf "/tmp/$FRP_TAR" -C /tmp
-    cp "/tmp/${FRP_PACKAGE}/frpc" /usr/local/bin/frpc
-    rm -rf "/tmp/${FRP_PACKAGE}" "/tmp/${FRP_TAR}"
-fi
-
-chmod +x /usr/local/bin/frpc
-info "frpc 安装成功"
-
-# 5. 创建配置同步脚本
-info "创建配置同步服务..."
-mkdir -p /etc/frp-client
-
-cat > /usr/local/bin/frpc-sync.sh << SCRIPT
-#!/bin/bash
-CONFIG_FILE="/etc/frp-client/frpc.toml"
-TEMP_FILE="/etc/frp-client/frpc.toml.tmp"
-LOG_FILE="/var/log/frpc-sync.log"
-API_TOKEN="$API_TOKEN"
-PORT="$PORT"
-
-# 从多个源拉取配置
-fetch_config() {
-    local mirrors=(
-        "http://localhost:\$PORT/api/configs/1/export"
-    )
-    
-    for mirror in "\${mirrors[@]}"; do
-        if curl -s -H "Authorization: Bearer \$API_TOKEN" "\$mirror" > "\$TEMP_FILE" 2>/dev/null; then
-            # 检查配置是否有变化
-            if [[ -f "\$CONFIG_FILE" ]] && diff -q "\$CONFIG_FILE" "\$TEMP_FILE" > /dev/null 2>&1; then
-                rm "\$TEMP_FILE"
-                return 0
-            fi
-            
-            # 更新配置
-            mv "\$TEMP_FILE" "\$CONFIG_FILE"
-            echo "[\$(date)] 配置已更新，重启 frpc" >> "\$LOG_FILE"
-            
-            # 重启 frpc
-            systemctl restart frpc
-            return 0
-        fi
-    done
-    
-    echo "[\$(date)] 拉取配置失败" >> "\$LOG_FILE"
-    return 1
-}
-
-fetch_config
-SCRIPT
-chmod +x /usr/local/bin/frpc-sync.sh
-
-# 6. 创建 systemd 服务
-info "创建 frpc systemd 服务..."
-
-cat > /etc/systemd/system/frpc.service << EOF
-[Unit]
-Description=FRP Client
-After=network.target
-
-[Service]
-Type=simple
-Environment="TZ=Asia/Shanghai"
-ExecStart=/usr/local/bin/frpc -c /etc/frp-client/frpc.toml
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-cat > /etc/systemd/system/frpc-sync.service << EOF
-[Unit]
-Description=FRP Config Sync
-After=network.target
-
-[Service]
-Type=oneshot
-ExecStart=/usr/local/bin/frpc-sync.sh
-EOF
-
-cat > /etc/systemd/system/frpc-sync.timer << EOF
-[Unit]
-Description=FRP Config Sync Timer
-
-[Timer]
-OnBootSec=1min
-OnUnitActiveSec=1min
-
-[Install]
-WantedBy=timers.target
-EOF
-
-# 7. 启动 Web 端
-info "启动 Web 管理端..."
-cd $INSTALL_DIR
-docker-compose up -d
-
-# 等待 Web 端启动
-info "等待 Web 端启动..."
-for i in {1..30}; do
-    if curl -s http://localhost:$PORT/login > /dev/null 2>&1; then
-        break
-    fi
-    sleep 1
 done
 
-# 8. 首次拉取配置并启动 frpc
-info "初始化 frpc 配置..."
-/usr/local/bin/frpc-sync.sh || warn "首次拉取配置失败，将在定时任务中重试"
+confirm() {
+    [ -n "$AUTO_YES" ] && return 0
+    read -rp "$1 [y/N] " ans
+    [[ "$ans" =~ ^[Yy]$ ]]
+}
 
-# 9. 启动 frpc 服务
-info "启动 frpc 服务..."
-systemctl daemon-reload
-systemctl enable frpc
-systemctl enable frpc-sync.timer
-systemctl start frpc
-systemctl start frpc-sync.timer
+# ==================== 1. 检查/安装 Docker ====================
+echo ""
+log INFO "=== FRP Console 安装开始 ==="
+log INFO "项目目录: $PROJECT_DIR"
 
-# 10. 完成
+install_docker() {
+    if need_sudo; then
+        die "需要 root 权限安装 Docker，请用 root 运行 或 先手动安装 Docker"
+    fi
+
+    if command -v apt-get >/dev/null 2>&1; then
+        log INFO "检测到 apt（Debian/Ubuntu），安装 Docker..."
+        apt-get update -y
+        [ ! -x /usr/bin/curl ] && apt-get install -y curl
+        curl -fsSL https://get.docker.com | sh
+    elif command -v dnf >/dev/null 2>&1; then
+        log INFO "检测到 dnf（Fedora/RHEL），安装 Docker..."
+        dnf -y install docker docker-compose-plugin
+        systemctl enable --now docker
+    elif command -v yum >/dev/null 2>&1; then
+        log INFO "检测到 yum（CentOS），安装 Docker..."
+        curl -fsSL https://get.docker.com | sh
+        systemctl enable --now docker
+    elif command -v apk >/dev/null 2>&1; then
+        log INFO "检测到 apk（Alpine），安装 Docker..."
+        apk add --no-cache docker docker-cli-compose
+        rc-update add docker default; service docker start
+    elif command -v pacman >/dev/null 2>&1; then
+        log INFO "检测到 pacman（Arch），安装 Docker..."
+        pacman -Sy --noconfirm docker docker-compose
+        systemctl enable --now docker
+    else
+        die "无法识别的包管理器，请手动安装 Docker 后重试"
+    fi
+}
+
+if [ -z "$SKIP_DOCKER" ]; then
+    if ! command -v docker >/dev/null 2>&1; then
+        log WARN "未检测到 Docker。"
+        if confirm "是否自动安装 Docker？"; then
+            install_docker
+        else
+            die "未安装 Docker，请先安装后重试（或用 --skip-docker 手动跳过）"
+        fi
+    else
+        log OK "已检测到 Docker"
+    fi
+else
+    log INFO "跳过 Docker 安装（--skip-docker）"
+fi
+
+# 校验 docker 命令
+if ! command -v docker >/dev/null 2>&1; then
+    die "docker 命令不可用"
+fi
+
+# compose 命令检测
+if docker compose version >/dev/null 2>&1; then
+    COMPOSE="docker compose"
+elif command -v docker-compose >/dev/null 2>&1; then
+    COMPOSE="docker-compose"
+else
+    die "未找到 docker compose，请安装 Docker Compose 插件"
+fi
+log OK "Docker Compose: $COMPOSE"
+
+# docker daemon 是否运行 / 当前用户是否有权限
+if ! docker info >/dev/null 2>&1; then
+    if [ -n "$SUDO" ] && $SUDO docker info >/dev/null 2>&1; then
+        log WARN "当前用户无权限访问 docker，使用 sudo 继续（后续命令可能需 sudo）"
+    else
+        log WARN "Docker 守护进程未运行或当前用户无权限，尝试启动..."
+        $SUDO systemctl start docker 2>/dev/null || true
+        sleep 2
+        if ! docker info >/dev/null 2>&1; then
+            die "Docker 不可用，请检查 docker 服务状态"
+        fi
+    fi
+fi
+log OK "Docker 守护进程可用"
+
+if [ ! -S /var/run/docker.sock ]; then
+    die "未找到 /var/run/docker.sock，容器无法管理 frpc"
+fi
+log OK "docker.sock 可用"
+
+# ==================== 2. 工作目录 / 检出 ====================
+cd "$PROJECT_DIR"
+
+# 关键配置文件检查
+for f in docker-compose.yml Dockerfile requirements.txt frontend/package.json app/app.py; do
+    if [ ! -e "$f" ]; then
+        die "缺少必需文件: $f，请确保在项目根目录运行本脚本"
+    fi
+done
+log OK "项目文件完整"
+
+# ==================== 3. .env ====================
+log "配置 .env ..."
+
+# make .env (if missing)
+if [ ! -f .env ]; then
+    [ -f .env.example ] && cp .env.example .env
+    log OK ".env 已创建（默认密码和管理员见下）"
+else
+    log OK ".env 已存在"
+fi
+
+gen_secret() { # $1 = bytes -> hex 字符串
+    if command -v openssl >/dev/null 2>&1; then
+        openssl rand -hex "$1"
+    elif command -v xxd >/dev/null 2>&1; then
+        head -c "$1" /dev/urandom | xxd -p -c 256
+    else
+        head -c "$1" /dev/urandom | tr -dc 'a-f0-9'
+    fi
+}
+
+# ensure_env key default_value  —— 键不存在则追加默认
+ensure_env() {
+    local key="$1" val="$2"
+    if ! grep -qE "^${key}=" .env; then
+        printf "%s=%s\n" "$key" "$val" >> .env
+    fi
+}
+# ensure_placeholder: 若 KEY 是占位符/空，则替换为 $2（新值）
+ensure_placeholder() {
+    local key="$1" newval="$2"
+    local cur
+    cur=$(grep -E "^${key}=" .env | tail -1 | cut -d= -f2-)
+    if [ -z "$cur" ] || echo "$cur" | grep -qE "change_me|CHANGE_ME|^$"; then
+        # Linux/macOS 兼容 sed 原地替换
+        if [ "$(uname)" = "Darwin" ]; then
+            sed -i '' "s#^${key}=.*#${key}=${newval}#" .env
+        else
+            sed -i "s#^${key}=.*#${key}=${newval}#" .env
+        fi
+    fi
+}
+
+# 基础键缺失则补默认
+ensure_env "PORT" "7600"
+ensure_env "TZ" "Asia/Shanghai"
+ensure_env "ADMIN_USER" "admin"
+ensure_env "ADMIN_PASSWORD" "CHANGE_ME"
+ensure_env "FORCE_HTTPS" "false"
+
+# 关键密钥：占位符/空则自动生成随机值
+ensure_placeholder "SECRET_KEY" "$(gen_secret 32)"
+ensure_placeholder "API_TOKEN" "$(gen_secret 16)"
+ensure_placeholder "ADMIN_PASSWORD" "$(gen_secret 24)"
+log OK "密钥/密码已生成（见 .env）"
+
+# 固定 DOCKER_GID
+GID_DOCKER=$(stat -c '%g' /var/run/docker.sock 2>/dev/null || echo "0")
+if [ "$GID_DOCKER" = "0" ] || [ -z "$GID_DOCKER" ]; then
+    GID_DOCKER="$(getent group docker 2>/dev/null | cut -d: -f3 || echo 999)"
+fi
+ensure_env "DOCKER_GID" "999"
+sed -i "s/^DOCKER_GID=.*/DOCKER_GID=${GID_DOCKER}/" .env
+log OK "docker 组 GID = $GID_DOCKER"
+
+# ==================== 4. 配置目录 /opt/frpc ====================
+log INFO "准备配置目录 $CONFIGS_DIR ..."
+if [ ! -d "$CONFIGS_DIR" ]; then
+    $SUDO mkdir -p "$CONFIGS_DIR"
+    log OK "已创建 $CONFIGS_DIR"
+else
+    log OK "$CONFIGS_DIR 已存在"
+fi
+# 属主改为容器内 appuser(1000)，web 容器才能读写
+if ! $SUDO chown -R "$CONFIG_OWNER" "$CONFIGS_DIR" 2>/dev/null; then
+    log WARN "无法 chown $CONFIGS_DIR（可能无权限），请手动执行:"
+    log WARN "  sudo chown -R 1000:1000 $CONFIGS_DIR"
+fi
+$SUDO chmod 755 "$CONFIGS_DIR" 2>/dev/null || true
+log OK "配置目录权限已设置"
+
+# ==================== 5. 清理旧容器 ====================
+if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q '^frp-console$'; then
+    log WARN "发现旧容器 frp-console，正在移除..."
+    docker rm -f frp-console
+fi
+
+# ==================== 6. 构建并启动 ====================
+log INFO "构建并启动容器（前端在容器内编译，可能需要几分钟）..."
+$COMPOSE up -d --build
+log OK "容器已启动"
+
+# ==================== 7. 等待健康检查 ====================
+log INFO "等待健康检查..."
+MAX_WAIT=180
+WAITED=0
+while [ $WAITED -lt $MAX_WAIT ]; do
+    STATUS=$(docker inspect --format='{{.State.Health.Status}}' frp-console 2>/dev/null || echo starting)
+    case "$STATUS" in
+        healthy) log OK "健康检查通过"; HEALTHY=1; break;;
+        unhealthy) log ERR "健康检查失败"; log ERR "查看日志: docker logs frp-console"; exit 1;;
+    esac
+    sleep 3; WAITED=$((WAITED+3))
+    printf "${DIM}.${RESET}"
+done
+[ -n "$HEALTHY" ] || log WARN "等待超时，请查看 docker ps / docker logs frp-console"
+
+# ==================== 8. 打印信息 ====================
 echo ""
-echo "========================================"
-echo "  安装完成！"
-echo "========================================"
+PORT=$(grep -E '^PORT=' .env | tail -1 | cut -d= -f2 | tr -d '[:space:]' || echo 7600)
+HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}'); [ -z "$HOST_IP" ] && HOST_IP="127.0.0.1"
+PASS=$(grep -E '^ADMIN_PASSWORD=' .env | tail -1 | cut -d= -f2)
+USER=$(grep -E '^ADMIN_USER=' .env | tail -1 | cut -d= -f2 | tr -d '[:space:]'); [ -z "$USER" ] && USER="admin"
+
+log "===== 部署完成 ====="
 echo ""
-echo "Web 管理界面: http://\$(hostname -I | awk '{print \$1}'):$PORT"
-echo "用户名: admin"
-echo "密码: $ADMIN_PASSWORD"
+echo "${GREEN}访问地址:${RESET}"
+echo "  本机:   http://localhost:${PORT}"
+echo "  局域网: http://${HOST_IP}:${PORT}"
 echo ""
-echo "管理命令:"
-echo "  查看 frpc 状态: systemctl status frpc"
-echo "  查看同步状态: systemctl status frpc-sync.timer"
-echo "  查看日志: journalctl -u frpc -f"
-echo "  重启 Web: cd $INSTALL_DIR && docker-compose restart"
+echo "${CYAN}登录信息:${RESET}"
+echo "  用户名: ${USER:-admin}"
+echo "  密码:   ${PASS}"
 echo ""
-echo "注意:"
-echo "  - Web 端使用 Docker 运行"
-echo "  - frpc 使用 systemd 运行（独立于 Docker）"
-echo "  - Docker 重启不会影响 frpc"
-echo "  - 配置修改后约1分钟自动同步到 frpc"
+echo "${DIM}常用命令:${RESET}"
+echo "  查看日志:   docker logs -f frp-console"
+echo "  重启服务:   docker restart frp-console"
+echo "  停止服务:   ${COMPOSE} down"
+echo "  卸载:       docker compose down && docker rmi frp-console-frp-console"
 echo ""
+log INFO "首次使用请在 frp-console 内添加客户端；配置存放于 $CONFIGS_DIR"

@@ -62,19 +62,29 @@ frpc 以 `fatedier/frpc` 容器方式运行，Web 控制台通过 Docker SDK（�
 
 ### Docker 部署（推荐）
 
-```bash
-# 创建目录
-mkdir -p /opt/frp-console && cd /opt/frp-console
+在一台装有 Docker（未装则脚本可自动安装）的 Linux 上：
 
-# 克隆仓库
+```bash
+# 创建目录并克隆仓库
+mkdir -p /opt/frp-console && cd /opt/frp-console
 git clone https://github.com/Kevin25858/frp-console.git .
 
-# 复制环境变量示例文件
-cp .env.example .env
-
-# 编辑 .env 文件
-nano .env
+# 一键部署（自动检测发行版、安装 Docker、创建 /opt/frpc、
+#            生成随机 .env、容器内编译前端并启动）
+sudo bash install.sh
 ```
+
+脚本参数：
+- `--yes` 所有确认默认「是」
+- `--no-docker` 跳过 Docker 安装（宿主机已装时使用）
+
+`install.sh` 完成：
+1. 检测并（可选）安装 Docker / Docker Compose
+2. 创建 `/opt/frpc` 配置目录并设属主（容器内 `appuser` UID 1000 可写）
+3. 生成 `.env`（随机 `SECRET_KEY`、`API_TOKEN`、`ADMIN_PASSWORD`）
+4. 自动获取宿主机 docker 组 GID 写入 `.env`
+5. 多阶段构建（**前端在容器内编译，宿主机无需 Node/npm**）并启动
+6. 等待健康检查通过，打印访问地址与登录信息
 
 `.env` 文件示例：
 
@@ -89,12 +99,14 @@ PORT=7600
 TZ=Asia/Shanghai
 ```
 
-```bash
-# 初始化宿主机环境（创建配置目录、获取 Docker 组 GID）
-sudo bash setup-host.sh
+`install.sh` 会自动生成 `.env`；如需手动配置，参考上面示例或 `.env.example`。手动部署时：
 
-# 将输出的 DOCKER_GID 写入 .env
-# 例如: DOCKER_GID=998
+```bash
+# 创建 /opt/frpc 并设属主（容器内 appuser UID 1000 可写，否则无法写配置）
+sudo mkdir -p /opt/frpc && sudo chown -R 1000:1000 /opt/frpc && sudo chmod 755 /opt/frpc
+
+# 复制并编辑 .env，填写 DOCKER_GID（stat -c '%g' /var/run/docker.sock）
+cp .env.example .env && nano .env
 
 # 启动服务
 docker compose up -d --build
