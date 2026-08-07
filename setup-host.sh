@@ -8,8 +8,8 @@ echo "=== FRP Console 宿主机设置 ==="
 # 1. 创建配置目录并设置权限
 echo "[1/2] 创建配置目录..."
 mkdir -p /opt/frpc
-# appuser 的 UID 是 999（Dockerfile 中创建）
-chown -R 999:999 /opt/frpc
+# appuser 的 UID 是 1000（Dockerfile 中创建）
+chown -R 1000:1000 /opt/frpc
 chmod 755 /opt/frpc
 
 # 2. 获取 Docker 组 GID
