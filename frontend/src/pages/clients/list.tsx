@@ -186,8 +186,8 @@ export default function ClientListPage() {
                                 <TableCell>{client.server_addr}</TableCell>
                                 <TableCell className="text-right">
                                     <div className="flex items-center justify-end gap-1">
-                                        {/* 启动按钮 - 仅在未运行时显示 */}
-                                        {client.status !== 'running' && (
+                                        {/* 启动按钮 - 仅在已停止时显示 */}
+                                        {client.status === 'stopped' && (
                                             <Button
                                                 variant="outline"
                                                 size="icon"
@@ -199,8 +199,8 @@ export default function ClientListPage() {
                                                 {isActionLoading(client, 'start') ? <LoadingIcon /> : <Play className="h-4 w-4" />}
                                             </Button>
                                         )}
-                                        {/* 停止/重启按钮 - 仅在运行时显示 */}
-                                        {client.status === 'running' && (
+                                        {/* 停止/重启按钮 - 运行中或异常时显示（容器实际都在运行） */}
+                                        {client.status !== 'stopped' && (
                                             <>
                                                 <Button
                                                     variant="outline"
@@ -325,8 +325,8 @@ export default function ClientListPage() {
                                 <div>服务器地址: {client.server_addr}</div>
                             </div>
                             <div className="flex flex-wrap gap-2">
-                                    {/* 启动按钮 - 仅在未运行时显示 */}
-                                    {client.status !== 'running' && (
+                                    {/* 启动按钮 - 仅在已停止时显示 */}
+                                    {client.status === 'stopped' && (
                                         <Button
                                             variant="outline"
                                             size="sm"
@@ -338,8 +338,8 @@ export default function ClientListPage() {
                                             启动
                                         </Button>
                                     )}
-                                    {/* 停止/重启按钮 - 仅在运行时显示 */}
-                                    {client.status === 'running' && (
+                                    {/* 停止/重启按钮 - 运行中或异常时显示（容器实际都在运行） */}
+                                    {client.status !== 'stopped' && (
                                         <>
                                             <Button
                                                 variant="outline"
