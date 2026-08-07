@@ -28,8 +28,8 @@ class ClientService:
     def get_all_clients():
         """获取所有客户端，返回字典列表"""
         db = get_db()
-        # ORDER BY id 按创建顺序排序，符合直觉
-        rows = db.execute('SELECT * FROM clients ORDER BY id').fetchall()
+        # ORDER BY name 按客户端名字排序
+        rows = db.execute('SELECT * FROM clients ORDER BY name').fetchall()
 
         # 把每行转成字典
         # sqlite3.Row 对象不能直接 JSON 序列化，转成 dict 才能返回给前端
