@@ -35,7 +35,7 @@ export default function ClientListPage() {
     const { data: clients, isLoading, error, fetchData: fetchClients } = useApi<Client[]>("/clients");
     const { success, error: toastError } = useToast();
     const [searchTerm, setSearchTerm] = useState("");
-    const [actionLoading, setActionLoading] = useState<{ id: number; action: string } | null>(null);
+    const [loadingKeys, setLoadingKeys] = useState<Set<string>>(new Set());
     const abortControllerRef = useRef<AbortController | null>(null);
     const isFetchingRef = useRef(false);
 
@@ -73,9 +73,12 @@ export default function ClientListPage() {
     }, [clients, searchTerm]);
 
     // 客户端启动/停止/重启
+    const actionKey = (clientId: number, action: string) => `${clientId}|${action}`;
     const handleClientAction = async (client: Client, action: 'start' | 'stop' | 'restart') => {
         const actionLabel = { start: '启动', stop: '停止', restart: '重启' }[action];
-        setActionLoading({ id: client.id, action });
+        const key = actionKey(client.id, action);
+        // 用 Set 记录，多个客户端的操作互不干扰
+        setLoadingKeys(prev => new Set(prev).add(key));
         try {
             await apiFetch(`/clients/${client.id}/${action}`, {
                 method: 'POST',
@@ -86,13 +89,21 @@ export default function ClientListPage() {
             console.error(`Failed to ${action} client ${client.id}:`, error);
             toastError(`${actionLabel}失败`);
         } finally {
-            setActionLoading(null);
+            setLoadingKeys(prev => {
+                const next = new Set(prev);
+                next.delete(key);
+                return next;
+            });
         }
     };
 
     // 判断指定按钮是否处于加载中
     const isActionLoading = (client: Client, action: 'start' | 'stop' | 'restart') =>
-        actionLoading?.id === client.id && actionLoading?.action === action;
+        loadingKeys.has(actionKey(client.id, action));
+
+    // 判断该客户端是否有任意操作在加载中
+    const isClientLoading = (clientId: number) =>
+        [...loadingKeys].some(key => key.startsWith(`${clientId}|`));
 
     // 加载中显示的旋转图标
     const LoadingIcon = () => <Loader2 className="h-4 w-4 animate-spin" />;
@@ -148,7 +159,7 @@ export default function ClientListPage() {
                             <TableRow key={client.id}>
                                 <TableCell className="font-medium">{client.name}</TableCell>
                                 <TableCell className="text-center">
-                                    {actionLoading?.id === client.id ? (
+                                    {isClientLoading(client.id) ? (
                                         <Badge variant="secondary" className="gap-1">
                                             <Loader2 className="h-3 w-3 animate-spin" />
                                             处理中
@@ -286,7 +297,7 @@ export default function ClientListPage() {
                         <CardContent className="p-4">
                             <div className="flex items-center justify-between mb-3">
                                 <span className="font-medium">{client.name}</span>
-                                {actionLoading?.id === client.id ? (
+                                {isClientLoading(client.id) ? (
                                     <Badge variant="secondary" className="gap-1">
                                         <Loader2 className="h-3 w-3 animate-spin" />
                                         处理中
