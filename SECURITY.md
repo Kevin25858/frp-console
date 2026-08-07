@@ -104,4 +104,4 @@ FRP Console 已实现以下安全功能：
 
 ## 许可证
 
-This security policy follows the project's main license [CC BY-NC-SA 4.0](LICENSE).
+[CC BY-NC-SA 4.0](LICENSE)

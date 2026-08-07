@@ -244,10 +244,6 @@ frp-console/
 | **Docker 安全** | 非 root 用户运行 |
 | **SQL 注入防护** | 参数化查询 |
 
-## License
-
-This project is licensed under the [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/). **Commercial use is prohibited.**
-
 ## 致谢
 
 - [FRP](https://github.com/fatedier/frp) - Fast Reverse Proxy
