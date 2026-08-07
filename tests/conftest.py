@@ -171,6 +171,15 @@ def test_app():
         app = create_app(testing=True)
         app.config['TESTING'] = True
 
+        # 若前端构建产物缺失（如 CI 未构建前端），提供占位 index.html，
+        # 避免 /login 和 SPA 路由的 send_static_file 返回 404
+        index_path = os.path.join(app.static_folder, 'index.html')
+        if not os.path.exists(index_path):
+            placeholder_dir = tempfile.mkdtemp(prefix='frp-console-dist-')
+            with open(os.path.join(placeholder_dir, 'index.html'), 'w', encoding='utf-8') as f:
+                f.write('<html><body>frp-console test placeholder</body></html>')
+            app.static_folder = placeholder_dir
+
         # 初始化测试数据库
         from models.database import init_db
         init_db()
