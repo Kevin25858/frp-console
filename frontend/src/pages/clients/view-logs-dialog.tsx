@@ -215,8 +215,8 @@ export function ViewLogsDialog({ clientId, clientName, children }: ViewLogsDialo
                     margin-right: 4px;
                 }
                 .log-level svg {
-                    width: 14px;
-                    height: 14px;
+                    width: 12px;
+                    height: 12px;
                 }
                 .log-level-error { color: #ff6b6b; }
                 .log-level-warn { color: #fcc419; }
