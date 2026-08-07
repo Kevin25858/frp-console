@@ -1,27 +1,41 @@
 """
 验证器模块
 包含各种数据验证函数
+
+为什么要验证输入：
+    1. 防止脏数据进数据库（比如空名字、超长字符串）
+    2. 防止恶意输入（比如配置里塞恶意脚本）
+    3. 早失败早反馈：用户提交时立刻告诉哪里错了，比后续报错好
+
+为什么用纯函数而不是类：
+    验证函数没有状态，输入相同输出就相同。
+    纯函数易于测试、易于组合，不需要面向对象的封装。
 """
-import sys
 import re
-from typing import Tuple, Optional, Dict, Any
 
 # Python 3.11+ 使用内置 tomllib，否则使用 tomli
+# tomllib 是 Python 3.11 才加入的标准库，低版本要装第三方包 tomli
+# 这里的 try/except 是兼容两种情况的常见写法
 try:
     import tomllib
 except ImportError:
     import tomli as tomllib
 
 
-def validate_password(password: str) -> Tuple[bool, str]:
+def validate_password(password):
     """
     验证密码强度
 
-    Args:
+    参数:
         password: 要验证的密码
 
-    Returns:
+    返回:
         (是否有效, 错误消息)
+
+    为什么只检查长度：
+        本项目是单用户管理控制台，密码策略可以简单些。
+        强密码策略（必须包含大小写数字特殊字符）反而让用户倾向于
+        把密码写在便签上，安全性反而下降。
     """
     if not password:
         return False, '密码不能为空'
@@ -29,48 +43,24 @@ def validate_password(password: str) -> Tuple[bool, str]:
     if len(password) < 8:
         return False, '密码长度至少为 8 个字符'
 
-    # 可选：添加更复杂的密码验证
-    # if not re.search(r'[A-Z]', password):
-    #     return False, '密码必须包含至少一个大写字母'
-    # if not re.search(r'[a-z]', password):
-    #     return False, '密码必须包含至少一个小写字母'
-    # if not re.search(r'\d', password):
-    #     return False, '密码必须包含至少一个数字'
-    # if not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
-    #     return False, '密码必须包含至少一个特殊字符'
-
     return True, ''
 
 
-def validate_email(email: str) -> Tuple[bool, str]:
+def validate_port(port):
     """
-    验证邮箱格式
+    验证端口号是否合法
 
-    Args:
-        email: 要验证的邮箱地址
-
-    Returns:
-        (是否有效, 错误消息)
-    """
-    if not email:
-        return True, ''  # 允许为空
-
-    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    if not re.match(email_pattern, email):
-        return False, '邮箱格式不正确'
-
-    return True, ''
-
-
-def validate_port(port: int) -> Tuple[bool, str]:
-    """
-    验证端口号
-
-    Args:
+    参数:
         port: 端口号
 
-    Returns:
+    返回:
         (是否有效, 错误消息)
+
+    端口范围说明：
+        0-1023   是知名端口（well-known），通常需要 root 权限
+        1024-49151 是注册端口
+        49152-65535 是动态端口
+        这里允许 1-65535，让用户自由选择。
     """
     if not isinstance(port, int):
         return False, '端口号必须是整数'
@@ -81,14 +71,14 @@ def validate_port(port: int) -> Tuple[bool, str]:
     return True, ''
 
 
-def validate_client_name(name: str) -> Tuple[bool, str]:
+def validate_client_name(name):
     """
-    验证客户端名称
+    验证客户端名称是否合法
 
-    Args:
+    参数:
         name: 客户端名称
 
-    Returns:
+    返回:
         (是否有效, 错误消息)
     """
     if not name or not name.strip():
@@ -97,58 +87,63 @@ def validate_client_name(name: str) -> Tuple[bool, str]:
     name = name.strip()
 
     # 检查长度
+    # 限制 100 字符防止过长字符串撑爆 UI 或数据库
     if len(name) > 100:
         return False, '客户端名称不能超过 100 个字符'
 
-    # 检查特殊字符
+    # 只允许字母、数字、下划线、连字符和中文
+    # 正则解释：
+    #   ^         字符串开头
+    #   [...]     字符集合
+    #   a-zA-Z0-9 字母和数字
+    #   _         下划线
+    #   \-        连字符（在字符集里要转义或放最后）
+    #   \u4e00-\u9fa5  中文 Unicode 范围
+    #   +         至少一个字符
+    #   $         字符串结尾
     if not re.match(r'^[a-zA-Z0-9_\-\u4e00-\u9fa5]+$', name):
         return False, '客户端名称只能包含字母、数字、下划线、连字符和中文'
 
     return True, ''
 
 
-def validate_server_addr(addr: str) -> Tuple[bool, str]:
+def _check_frpc_required_fields(config):
     """
-    验证服务器地址
-
-    Args:
-        addr: 服务器地址
-
-    Returns:
-        (是否有效, 错误消息)
-    """
-    if not addr or not addr.strip():
-        return True, ''  # 允许为空
-
-    addr = addr.strip()
-
-    # 可以是域名或 IP 地址
-    domain_pattern = r'^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9](?:\.[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9])*$'
-    ip_pattern = r'^(\d{1,3}\.){3}\d{1,3}$'
-
-    if not re.match(domain_pattern, addr) and not re.match(ip_pattern, addr):
-        return False, '服务器地址格式不正确'
-
-    return True, ''
-
-
-def _check_frpc_required_fields(config: Dict[str, Any]) -> Tuple[bool, str]:
-    """
-    检查 frpc 配置是否包含必需的字段。
+    检查 frpc 配置是否包含必需的字段
     支持两种格式：
     - 新版 TOML：[common] 节 + [[proxies]] 节
     - 旧版 flat：顶层 serverAddr/serverPort + [proxy] 节
-    """
-    # 检查 [common] 节（新版 TOML 格式）
-    common = config.get('common', {})
-    server_addr = common.get('serverAddr') or common.get('server_addr')
-    server_port = common.get('serverPort') or common.get('server_port')
 
-    # 如果 [common] 里没有，检查顶层（旧版 flat 格式）
+    参数:
+        config: 解析后的配置字典
+
+    返回:
+        (是否有效, 错误消息)
+
+    为什么兼容多种格式：
+        frpc 配置格式随版本演进过：
+          旧版（v0.51 之前）用 [common] + [proxy]
+          新版（v0.52+）用顶层 + [[proxies]]
+        用户可能从网上抄各种模板，都要能识别。
+    """
+    # 先从 [common] 节找服务器地址和端口
+    common = config.get('common', {})
+    server_addr = common.get('serverAddr')
     if not server_addr:
-        server_addr = config.get('serverAddr') or config.get('server_addr')
+        server_addr = common.get('server_addr')
+    server_port = common.get('serverPort')
     if not server_port:
-        server_port = config.get('serverPort') or config.get('server_port')
+        server_port = common.get('server_port')
+
+    # 如果 [common] 里没有，从顶层找（旧版格式）
+    if not server_addr:
+        server_addr = config.get('serverAddr')
+        if not server_addr:
+            server_addr = config.get('server_addr')
+    if not server_port:
+        server_port = config.get('serverPort')
+        if not server_port:
+            server_port = config.get('server_port')
 
     if not server_addr:
         return False, '配置缺少 serverAddr（FRP 服务器地址）'
@@ -157,14 +152,16 @@ def _check_frpc_required_fields(config: Dict[str, Any]) -> Tuple[bool, str]:
         return False, '配置缺少 serverPort（FRP 服务器端口）'
 
     # 验证端口号
+    # 配置里的端口可能是字符串，要转成 int 检查范围
     try:
         port = int(server_port)
         if port < 1 or port > 65535:
-            return False, f'serverPort 无效: {server_port}，必须是 1-65535 之间的整数'
+            return False, 'serverPort 无效: ' + str(server_port) + '，必须是 1-65535 之间的整数'
     except (ValueError, TypeError):
-        return False, f'serverPort 无效: {server_port}，必须是整数'
+        return False, 'serverPort 无效: ' + str(server_port) + '，必须是整数'
 
     # 检查是否有至少一个代理配置
+    # 没有代理的 frpc 配置没意义（什么都不转发）
     has_proxy = False
 
     # 新版：[[proxies]] 是列表
@@ -175,17 +172,22 @@ def _check_frpc_required_fields(config: Dict[str, Any]) -> Tuple[bool, str]:
     # 旧版：[proxy] 节
     if not has_proxy:
         proxy = config.get('proxy', {})
-        if isinstance(proxy, dict) and ('type' in proxy or 'localPort' in proxy or 'remotePort' in proxy):
-            has_proxy = True
+        if isinstance(proxy, dict):
+            if 'type' in proxy or 'localPort' in proxy or 'remotePort' in proxy:
+                has_proxy = True
 
     # 遍历所有节查找代理配置
+    # 这是为了兼容一些非标准格式（用户自定义的节名）
     if not has_proxy:
+        # 这些键不是代理配置，跳过
         skip_keys = {'common', 'serverAddr', 'server_addr', 'serverPort', 'server_port',
                      'auth', 'transport', 'user', 'meta', 'include', 'proxies', 'proxy'}
-        for key, value in config.items():
+        for key in config:
             if key in skip_keys:
                 continue
+            value = config[key]
             if isinstance(value, dict):
+                # 如果某个节里有 type/localPort/remotePort，认为是代理
                 if 'type' in value or 'localPort' in value or 'remotePort' in value:
                     has_proxy = True
                     break
@@ -196,63 +198,37 @@ def _check_frpc_required_fields(config: Dict[str, Any]) -> Tuple[bool, str]:
     return True, ''
 
 
-def _check_frpc_deprecated_options(config: Dict[str, Any]) -> list:
+def validate_toml_config(config):
     """
-    检查是否有已弃用的 FRP 配置选项
+    验证 TOML 配置格式是否正确
 
-    Args:
-        config: 解析后的配置字典
-
-    Returns:
-        警告信息列表
-    """
-    warnings = []
-
-    # 已弃用的选项
-    deprecated = {
-        'authentication_method': '请使用 auth.method',
-        'authenticate_heartbeats': '请使用 auth.additionalScopes',
-        'authenticate_new_work_conns': '请使用 auth.additionalScopes',
-    }
-
-    def check_dict(d: Dict[str, Any], prefix: str = ''):
-        for key, value in d.items():
-            full_key = f"{prefix}.{key}" if prefix else key
-            if key in deprecated:
-                warnings.append(f'配置警告: {full_key} 已弃用，{deprecated[key]}')
-            if isinstance(value, dict):
-                check_dict(value, full_key)
-            elif isinstance(value, list):
-                for i, item in enumerate(value):
-                    if isinstance(item, dict):
-                        check_dict(item, f"{full_key}[{i}]")
-
-    check_dict(config)
-    return warnings
-
-
-def validate_toml_config(config: str) -> Tuple[bool, str]:
-    """
-    验证 TOML/INI 配置格式（使用真正的 TOML 解析器）
-
-    Args:
+    参数:
         config: 配置字符串
 
-    Returns:
+    返回:
         (是否有效, 错误消息)
+
+    验证流程：
+        1. 非空检查
+        2. TOML 语法解析
+        3. frpc 必需字段检查
+    这样分层验证便于定位问题。
     """
     if not config or not config.strip():
         return False, '配置不能为空'
 
-    # 尝试解析 TOML
+    # 尝试用 TOML 解析器解析
     try:
         parsed_config = tomllib.loads(config)
     except tomllib.TOMLDecodeError as e:
-        return False, f'TOML 格式错误: {str(e)}'
+        # TOML 语法错误（比如引号没闭合）
+        return False, 'TOML 格式错误: ' + str(e)
     except Exception as e:
-        return False, f'配置解析失败: {str(e)}'
+        # 其他意外错误
+        return False, '配置解析失败: ' + str(e)
 
     # 检查是否为空配置
+    # 解析成功但内容为空也算无效
     if not parsed_config:
         return False, '配置不能为空对象'
 
@@ -262,49 +238,3 @@ def validate_toml_config(config: str) -> Tuple[bool, str]:
         return False, error_msg
 
     return True, ''
-
-
-def validate_toml_config_with_warnings(config: str) -> Tuple[bool, str, list]:
-    """
-    验证 TOML/INI 配置格式，并返回警告信息
-
-    Args:
-        config: 配置字符串
-
-    Returns:
-        (是否有效, 错误消息, 警告列表)
-    """
-    is_valid, error_msg = validate_toml_config(config)
-    if not is_valid:
-        return False, error_msg, []
-
-    # 解析配置以获取警告
-    try:
-        parsed_config = tomllib.loads(config)
-        warnings = _check_frpc_deprecated_options(parsed_config)
-        return True, '', warnings
-    except Exception:
-        return True, '', []
-
-
-def sanitize_filename(filename: str) -> str:
-    """
-    清理文件名，移除不安全字符
-
-    Args:
-        filename: 原始文件名
-
-    Returns:
-        清理后的文件名
-    """
-    # 移除路径遍历字符
-    filename = filename.replace('..', '').replace('/', '').replace('\\', '')
-
-    # 移除特殊字符
-    filename = re.sub(r'[<>:"|?*]', '', filename)
-
-    # 限制长度
-    if len(filename) > 255:
-        filename = filename[:255]
-
-    return filename.strip()

@@ -1,175 +1,111 @@
 """
 日志工具模块
-提供彩色终端日志输出功能
+在终端输出带颜色的日志，方便调试
+
+什么是 ANSI 颜色代码：
+    终端（如 Linux 的 bash、Windows Terminal）支持一种特殊的字符序列，
+    以 \033[ 开头，能控制文字颜色、背景色、样式等。
+    例如 \033[91m 表示后面的文字用红色，\033[0m 表示重置所有样式。
+
+为什么不用 Python 自带的 logging 模块：
+    1. logging 配置复杂，对初学者不友好
+    2. 本项目是单进程应用，不需要复杂的日志路由
+    3. 彩色输出更直观，便于在终端里区分日志级别
+    4. 生产环境如果要持久化日志，可以重定向 stdout 到文件
 """
 from datetime import datetime
-from typing import Dict, Tuple
+
+
+# ANSI 颜色代码（终端控制字符）
+RESET = '\033[0m'      # 重置颜色
+DIM = '\033[2m'        # 暗淡
+RED = '\033[91m'       # 红色
+GREEN = '\033[92m'     # 绿色
+YELLOW = '\033[93m'    # 黄色
+CYAN = '\033[96m'      # 青色
 
 
 class ColorLogger:
     """终端彩色日志输出工具类"""
 
-    # ANSI 颜色代码
-    COLORS: Dict[str, str] = {
-        'reset': '\033[0m',
-        'bold': '\033[1m',
-        'dim': '\033[2m',
-        'red': '\033[91m',
-        'green': '\033[92m',
-        'yellow': '\033[93m',
-        'blue': '\033[94m',
-        'magenta': '\033[95m',
-        'cyan': '\033[96m',
-        'white': '\033[97m',
-        'bg_red': '\033[41m',
-        'bg_green': '\033[42m',
-        'bg_yellow': '\033[43m',
-        'bg_blue': '\033[44m',
-    }
-
-    # 日志级别配置（颜色和图标）
-    LEVELS: Dict[str, Tuple[str, str]] = {
-        'DEBUG': ('dim', '◼'),
-        'INFO': ('cyan', 'ℹ'),
-        'SUCCESS': ('green', '✓'),
-        'WARNING': ('yellow', '⚠'),
-        'ERROR': ('red', '✗'),
-        'CRITICAL': ('bg_red', '🔥'),
-    }
+    # 所有方法都是 classmethod，不需要实例化就能用
+    # 直接 ColorLogger.info('xxx') 调用，比 logger = Logger(); logger.info() 简洁
 
     @classmethod
-    def log(cls, level: str, message: str, prefix: str = '') -> None:
+    def log(cls, level, message, prefix=''):
         """
-        输出带颜色的日志
+        输出一条日志
 
-        Args:
-            level: 日志级别 (DEBUG, INFO, SUCCESS, WARNING, ERROR, CRITICAL)
-            message: 日志消息
-            prefix: 可选的前缀标签
+        参数:
+            level:   日志级别，比如 'INFO'、'ERROR'
+            message: 要输出的内容
+            prefix:  可选的标签，比如 'Auth'、'Client'
         """
-        color_name, icon = cls.LEVELS.get(level, ('white', '•'))
-        color = cls.COLORS.get(color_name, '')
-        reset = cls.COLORS['reset']
-        timestamp = datetime.now().strftime('%H:%M:%S')
+        # 根据级别选择颜色和文字标签
+        # 不同级别用不同颜色，方便一眼区分重要程度
+        if level == 'DEBUG':
+            color = DIM
+            tag = 'DEBUG'
+        elif level == 'INFO':
+            color = CYAN
+            tag = 'INFO'
+        elif level == 'SUCCESS':
+            color = GREEN
+            tag = 'OK'
+        elif level == 'WARNING':
+            color = YELLOW
+            tag = 'WARN'
+        elif level == 'ERROR':
+            color = RED
+            tag = 'ERROR'
+        else:
+            color = ''
+            tag = level
 
-        # 构建前缀
-        prefix_str = f"[{cls.COLORS['dim']}{prefix}{reset}] " if prefix else ""
+        # 获取当前时间，只取时分秒
+        # 不取日期是因为日志通常实时看，日期太占地方
+        now = datetime.now()
+        time_str = now.strftime('%H:%M:%S')
 
-        # 输出格式: [时间] [图标] [前缀] 消息
-        log_line = f"{cls.COLORS['dim']}[{timestamp}]{reset} {color}{icon}{reset} {prefix_str}{message}"
+        # 拼接前缀标签
+        # prefix 是模块标签，比如 [Auth]、[Database]，用暗淡颜色不抢眼
+        if prefix:
+            prefix_str = '[' + DIM + prefix + RESET + '] '
+        else:
+            prefix_str = ''
+
+        # 拼接完整日志行并输出
+        # 格式：[12:34:56] [INFO] [Auth] 用户 admin 登录成功
+        # 时间用暗淡，级别用对应颜色，内容默认色
+        log_line = DIM + '[' + time_str + ']' + RESET + ' ' + color + '[' + tag + ']' + RESET + ' ' + prefix_str + message
         print(log_line)
 
     @classmethod
-    def debug(cls, message: str, prefix: str = '') -> None:
-        """输出 DEBUG 级别日志"""
+    def debug(cls, message, prefix=''):
+        """输出 DEBUG 级别日志（最详细，通常只在开发时用）"""
         cls.log('DEBUG', message, prefix)
 
     @classmethod
-    def info(cls, message: str, prefix: str = '') -> None:
-        """输出 INFO 级别日志"""
+    def info(cls, message, prefix=''):
+        """输出 INFO 级别日志（一般信息，比如启动成功）"""
         cls.log('INFO', message, prefix)
 
     @classmethod
-    def success(cls, message: str, prefix: str = '') -> None:
-        """输出 SUCCESS 级别日志"""
+    def success(cls, message, prefix=''):
+        """输出 SUCCESS 级别日志（操作成功，比如客户端启动）"""
         cls.log('SUCCESS', message, prefix)
 
     @classmethod
-    def warning(cls, message: str, prefix: str = '') -> None:
-        """输出 WARNING 级别日志"""
+    def warning(cls, message, prefix=''):
+        """输出 WARNING 级别日志（警告，不影响运行但要注意）"""
         cls.log('WARNING', message, prefix)
 
     @classmethod
-    def error(cls, message: str, prefix: str = '') -> None:
-        """输出 ERROR 级别日志"""
+    def error(cls, message, prefix=''):
+        """输出 ERROR 级别日志（错误，操作失败了）"""
         cls.log('ERROR', message, prefix)
 
     @classmethod
-    def critical(cls, message: str, prefix: str = '') -> None:
-        """输出 CRITICAL 级别日志"""
+    def critical(cls, message, prefix=''):
+        """输出 CRITICAL 级别日志（严重错误，系统可能无法继续运行）"""
         cls.log('CRITICAL', message, prefix)
-
-
-class AnsiToHtml:
-    """将 ANSI 颜色代码转换为 HTML"""
-
-    # ANSI 代码到 CSS 样式的映射
-    STYLE_MAP: Dict[str, str] = {
-        '0': 'reset', '1': 'bold', '2': 'dim',
-        '30': 'color:#000', '31': 'color:#ff6b6b', '32': 'color:#51cf66',
-        '33': 'color:#ffd43b', '34': 'color:#4dabf7', '35': 'color:#e599f7',
-        '36': 'color:#22b8cf', '37': 'color:#f8f9fa',
-        '90': 'color:#666', '91': 'color:#ff6b6b', '92': 'color:#51cf66',
-        '93': 'color:#ffd43b', '94': 'color:#4dabf7', '95': 'color:#e599f7',
-        '96': 'color:#22b8cf', '97': 'color:#fff',
-        '40': 'bg:#000', '41': 'bg:#ff6b6b', '42': 'bg:#51cf66',
-        '43': 'bg:#ffd43b', '44': 'bg:#4dabf7', '45': 'bg:#e599f7',
-        '46': 'bg:#22b8cf', '47': 'bg:#f8f9fa',
-    }
-
-    # ANSI 颜色代码正则表达式
-    ANSI_PATTERN = None  # 将在类加载时初始化
-
-    @classmethod
-    def convert(cls, text: str) -> str:
-        """
-        将 ANSI 文本转换为 HTML
-
-        Args:
-            text: 包含 ANSI 颜色代码的文本
-
-        Returns:
-            转换后的 HTML 文本
-        """
-        if not text:
-            return ''
-
-        import re
-
-        if cls.ANSI_PATTERN is None:
-            cls.ANSI_PATTERN = re.compile(r'\x1b\[(\d+;?)*m')
-
-        result = []
-        current_style = []
-        last_end = 0
-
-        for match in cls.ANSI_PATTERN.finditer(text):
-            # 添加匹配前的文本
-            if match.start() > last_end:
-                content = text[last_end:match.start()]
-                if content:
-                    if current_style:
-                        style = ';'.join(current_style)
-                        result.append(f'<span style="{style}">{content}</span>')
-                    else:
-                        result.append(content)
-
-            # 解析 ANSI 代码
-            codes = match.group(0)[2:-1].split(';')
-            for code in codes:
-                if code == '0':
-                    current_style = []
-                elif code in ['1', '2']:
-                    if code == '1':
-                        current_style.append('font-weight:bold')
-                    else:
-                        current_style.append('opacity:0.7')
-                elif code in cls.STYLE_MAP:
-                    style = cls.STYLE_MAP[code]
-                    if style.startswith('color:'):
-                        current_style.append(style)
-                    elif style.startswith('bg:'):
-                        current_style.append(f'background-color:{style[3:]}')
-
-            last_end = match.end()
-
-        # 添加剩余文本
-        if last_end < len(text):
-            content = text[last_end:]
-            if current_style:
-                style = ';'.join(current_style)
-                result.append(f'<span style="{style}">{content}</span>')
-            else:
-                result.append(content)
-
-        return ''.join(result)
