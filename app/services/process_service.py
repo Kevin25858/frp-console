@@ -412,21 +412,22 @@ class ProcessService:
 
     @staticmethod
     def stop(client_id):
-        """停止并移除容器（保留配置文件）"""
+        """停止容器（只停止，不删除容器）
+
+        为什么只停止不删除：
+            用户预期「停止」只是让服务暂停，容器与配置应保留，
+            下次可直接启动，无需重新部署/拉镜像。
+            删除容器会丢运行现场（日志、挂载状态），体验不佳。
+        """
         container = ProcessService._get_container(client_id)
         if not container:
             # 容器不存在视为已停止，幂等操作
             return True, '容器未运行'
 
         try:
-            try:
-                # timeout=10：给 frpc 10 秒优雅退出
-                # 超时后 Docker 会发 SIGKILL 强制杀
-                container.stop(timeout=10)
-            except Exception:
-                pass
-            # remove 把容器彻底删掉，否则会留下 exited 状态的容器
-            container.remove()
+            # timeout=10：给 frpc 10 秒优雅退出
+            # 超时后 Docker 会发 SIGKILL 强制杀
+            container.stop(timeout=10)
             ColorLogger.success('客户端 ' + str(client_id) + ' 容器已停止', 'Process')
             return True, '停止成功'
         except APIError as e:
