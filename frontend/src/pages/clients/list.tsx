@@ -148,7 +148,12 @@ export default function ClientListPage() {
                             <TableRow key={client.id}>
                                 <TableCell className="font-medium">{client.name}</TableCell>
                                 <TableCell className="text-center">
-                                    {client.status === 'running' ? (
+                                    {actionLoading?.id === client.id ? (
+                                        <Badge variant="secondary" className="gap-1">
+                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                            处理中
+                                        </Badge>
+                                    ) : client.status === 'running' ? (
                                         <Badge className="bg-green-500 hover:bg-green-600 gap-1">
                                             <CheckCircle2 className="h-3 w-3" />
                                             运行中
@@ -281,7 +286,12 @@ export default function ClientListPage() {
                         <CardContent className="p-4">
                             <div className="flex items-center justify-between mb-3">
                                 <span className="font-medium">{client.name}</span>
-                                {client.status === 'running' ? (
+                                {actionLoading?.id === client.id ? (
+                                    <Badge variant="secondary" className="gap-1">
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                        处理中
+                                    </Badge>
+                                ) : client.status === 'running' ? (
                                     <Badge className="bg-green-500 hover:bg-green-600 gap-1">
                                         <CheckCircle2 className="h-3 w-3" />
                                         运行中
