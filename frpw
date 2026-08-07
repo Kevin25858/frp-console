@@ -1,0 +1,1056 @@
+#!/bin/bash
+# ============================================================
+# FRP Console 管理脚本（交互式菜单）
+#
+# 全局命令: frpw
+#
+# 功能：
+#   1. 自动检测是否已安装
+#   2. 显示项目状态
+#   3. 启动 / 停止 / 重启服务
+#   4. 查看账号
+#   5. 重置密码
+#   6. 检查更新（预留接口）
+#   7. 卸载（只卸载管理控制台，保留 frpc 容器和配置文件）
+#   8. 首次运行引导设置账号密码
+#   9. 自动注册全局命令 frpw
+#
+# 用法：
+#   frpw              # 进入交互菜单
+#   frpw status       # 直接查看状态
+#   frpw register     # 重新注册全局命令
+# ============================================================
+# 注意：本脚本不用 set -e，因为 read 超时会触发意外退出
+
+# ==================== 基本配置 ====================
+
+# 获取脚本真实路径（即使通过软链接运行也能定位到项目目录）
+SCRIPT_SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SCRIPT_SOURCE" ]; do
+    SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" >/dev/null 2>&1 && pwd)"
+    SCRIPT_SOURCE="$(readlink "$SCRIPT_SOURCE")"
+    case "$SCRIPT_SOURCE" in
+        /*) ;;
+        *) SCRIPT_SOURCE="$SCRIPT_DIR/$SCRIPT_SOURCE" ;;
+    esac
+done
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SOURCE")" >/dev/null 2>&1 && pwd)"
+
+# 项目根目录（脚本所在目录）
+PROJECT_DIR="$SCRIPT_DIR"
+
+# 全局命令安装位置
+GLOBAL_BIN="/usr/local/bin/frpw"
+
+# 关键文件路径
+ENV_FILE="$PROJECT_DIR/.env"
+COMPOSE_FILE="$PROJECT_DIR/docker-compose.yml"
+DEPLOY_SCRIPT="$PROJECT_DIR/deploy.sh"
+
+# 容器名
+CONTAINER_NAME="frp-console"
+
+# ==================== 颜色定义 ====================
+# 用 printf 生成实际控制字符（比 \033 转义更兼容）
+RED=$(printf '\033[91m')
+GREEN=$(printf '\033[92m')
+YELLOW=$(printf '\033[93m')
+CYAN=$(printf '\033[96m')
+BLUE=$(printf '\033[94m')
+MAGENTA=$(printf '\033[95m')
+DIM=$(printf '\033[2m')
+BOLD=$(printf '\033[1m')
+RESET=$(printf '\033[0m')
+
+# ==================== 界面元素 ====================
+# 框线字符（闭合式：右侧也有边框）
+LINE_H="─"
+LINE_V="│"
+LINE_TL="╭"
+LINE_TR="╮"
+LINE_BL="╰"
+LINE_BR="╯"
+
+# 状态圆点（绿色=正常，红色=停止，黄色=警告，灰色=未知）
+DOT_OK="${GREEN}●${RESET}"
+DOT_STOP="${RED}●${RESET}"
+DOT_WARN="${YELLOW}●${RESET}"
+DOT_GRAY="${DIM}●${RESET}"
+
+# 分隔线（50 字符宽，用 printf 重复避免 tr 的多字节问题）
+SEP=$(printf '─%.0s' $(seq 1 50))
+
+# 顶部标题横幅（闭合式边框）
+print_banner() {
+    echo ""
+    echo "  ${CYAN}${LINE_TL}${SEP}${LINE_TR}${RESET}"
+    echo "  ${CYAN}${LINE_V}${RESET}          ${BOLD}${MAGENTA}FRP Console 管理工具${RESET}          ${CYAN}${LINE_V}${RESET}"
+    echo "  ${CYAN}${LINE_BL}${SEP}${LINE_BR}${RESET}"
+    echo ""
+}
+
+# 信息区块标题
+# 用法: print_section "标题"
+print_section() {
+    echo ""
+    echo "  ${CYAN}${LINE_TL}${SEP}${LINE_TR}${RESET}"
+    printf "  ${CYAN}${LINE_V}${RESET} ${BOLD}%s${RESET}\n" "$1"
+}
+
+# ==================== 工具函数 ====================
+
+# 终端控制序列（ANSI escape codes）
+CURSOR_UP=$(printf '\033[A')
+CURSOR_HIDE=$(printf '\033[?25l')
+CURSOR_SHOW=$(printf '\033[?25h')
+CLEAR_SCREEN=$(printf '\033[2J\033[H')
+CLEAR_LINE=$(printf '\033[2K\r')
+# 清屏并回到左上角（比单独 \\033[2J + \\033[H 更可靠）
+HOME_CLEAR=$(printf '\033[2J\033[1;1H')
+
+# 高亮颜色（蓝底白字，比反转色更现代柔和）
+HIGHLIGHT=$(printf '\033[44;97m')  # 蓝底 + 亮白字
+
+# 输出带时间戳的日志
+log() {
+    local level="$1"
+    local msg="$2"
+    local color=""
+    case "$level" in
+        INFO)  color="$CYAN" ;;
+        OK)    color="$GREEN" ;;
+        WARN)  color="$YELLOW" ;;
+        ERROR) color="$RED" ;;
+        *)     color="" ;;
+    esac
+    local time_str
+    time_str=$(date '+%H:%M:%S')
+    echo "${DIM}[${time_str}]${RESET} ${color}[${level}]${RESET} ${msg}"
+}
+
+# 输出错误并退出
+die() {
+    log ERROR "$1"
+    exit 1
+}
+
+# 暂停等待回车
+pause() {
+    echo ""
+    read -rp "${DIM}按回车返回菜单...${RESET}" dummy
+}
+
+# 执行命令并显示旋转动画
+# 参数：消息文本  要执行的命令
+# 在命令执行期间显示旋转的 -\\|/ 动画
+run_with_spinner() {
+    local msg="$1"
+    local cmd="$2"
+    local spin='-\|/'
+    local i=0
+    local rc=0
+
+    echo -n "$CURSOR_HIDE"
+    # 命令在后台运行
+    eval "$cmd" &
+    local cmd_pid=$!
+
+    # 旋转动画：每秒更新 10 帧
+    while kill -0 "$cmd_pid" 2>/dev/null; do
+        printf "\r  ${CYAN}${spin:$i:1}${RESET} ${msg}..."
+        i=$(( (i+1) % 4 ))
+        sleep 0.1
+    done
+
+    # 等待命令完成
+    wait "$cmd_pid" 2>/dev/null
+    rc=$?
+
+    # 显示结果
+    if [ "$rc" -eq 0 ]; then
+        printf "\r  ${GREEN}✔${RESET} ${msg}${DIM}完成${RESET}   \n"
+    else
+        printf "\r  ${RED}✘${RESET} ${msg}${DIM}完成${RESET}   \n"
+    fi
+
+    echo -n "$CURSOR_SHOW"
+    return $rc
+}
+
+# -------------------- 键盘输入读取 --------------------
+
+# 读取方向键和回车
+# 返回值（通过全局变量 _KEY）：
+#   up    - 上箭头
+#   down  - 下箭头
+#   enter - 回车键
+#   q     - Q 键（退出）
+read_key() {
+    _KEY=""
+    local char
+
+    # 阻塞式读取一个字符（没有超时，不会误退出）
+    # -s: 不回显，-N1: 读一个字符，不把回车当分隔符
+    # （用 -N1 而不是 -n1，因为 -n1 会丢弃回车符）
+    read -s -N1 char 2>/dev/null || return
+
+    case "$char" in
+        $'\x0a'|$'\x0d')
+            # 回车（Line Feed 或 Carriage Return）
+            _KEY="enter"
+            ;;
+        q|Q)
+            _KEY="q"
+            ;;
+        $'\x1b')
+            # ESC 开头，可能是方向键
+            local seq
+            # 读取后续两个字节（方向键是 \033[A，共 3 字节）
+            read -s -N2 -t0.05 seq 2>/dev/null
+            case "$seq" in
+                '[A') _KEY="up" ;;
+                '[B') _KEY="down" ;;
+            esac
+            ;;
+    esac
+}
+
+# -------------------- 动态菜单渲染 --------------------
+
+# 渲染菜单项（支持高亮当前选中项）
+# 参数：当前选中索引  是否已安装  是否逐行动画（可选，默认 0）
+render_menu_items() {
+    local selected=$1
+    local is_installed=$2
+    local stagger=${3:-0}
+    local items=()
+    local i
+
+    if [ "$is_installed" = "no" ]; then
+        items=("1: 初始化安装" "0: 退出")
+    else
+        items=(
+            "1: 查看状态"
+            "2: 启动服务"
+            "3: 停止服务"
+            "4: 重启服务"
+            "5: 查看账号"
+            "6: 重置密码"
+            "7: 检查更新"
+            "8: 卸载管理工具"
+            "0: 退出"
+        )
+    fi
+
+    local total=${#items[@]}
+
+    for ((i=0; i<total; i++)); do
+        local label="${items[$i]}"
+        local num="${label%%:*}"
+        local text="${label#*: }"
+
+        if [ "$i" -eq "$selected" ]; then
+            # 选中行：蓝底白字 + ▸ 箭头
+            printf "  ${LINE_V}  ${HIGHLIGHT}▸ ${num}  ${text}${RESET}\n"
+        else
+            if [ "$num" = "7" ]; then
+                # 预留功能用暗淡显示
+                printf "  ${LINE_V}  ${DIM}  ${num}  ${text}${RESET}\n"
+            elif [ "$num" = "8" ]; then
+                # 危险操作用红色警示
+                printf "  ${LINE_V}  ${RED}  ${num}  ${text}${RESET}\n"
+            else
+                printf "  ${LINE_V}    ${num}  ${text}\n"
+            fi
+        fi
+
+        # 逐行动画：首次加载时每行间隔 25ms
+        if [ "$stagger" -eq 1 ]; then
+            sleep 0.025
+        fi
+    done
+}
+
+# 全屏重绘（每次完整绘制，但隐藏光标所以不闪烁）
+# 参数：选中索引  安装状态  容器状态  动画模式（可选）
+redraw_full_screen() {
+    local selected=$1
+    local install_status=$2
+    local current_status=$3
+    local animate=${4:-0}
+
+    # 清屏回到左上角 + 隐藏光标
+    echo -n "${HOME_CLEAR}${CURSOR_HIDE}"
+
+    # 横幅
+    print_banner
+
+    # 状态圆点
+    local status_dot
+    if echo "$current_status" | grep -q "运行中.*健康\|运行中(健康)"; then
+        status_dot="$DOT_OK"
+    elif echo "$current_status" | grep -q "运行中\|启动中"; then
+        status_dot="$DOT_WARN"
+    elif echo "$current_status" | grep -q "已停止\|未安装"; then
+        status_dot="$DOT_STOP"
+    else
+        status_dot="$DOT_GRAY"
+    fi
+
+    printf "  ${DIM}%-10s${RESET} %s %s\n" "状态" "$status_dot" "$current_status"
+    printf "  ${DIM}%-10s${RESET} %s\n" "目录" "$PROJECT_DIR"
+
+    # 动画模式：状态行之后有个轻微呼吸停顿
+    if [ "$animate" -eq 1 ]; then
+        sleep 0.08
+    fi
+
+    echo ""
+
+    # 菜单（闭合式边框，仅边框闭合，菜单项只有左壁）
+    echo "  ${CYAN}${LINE_TL}${SEP}${LINE_TR}${RESET}"
+    echo "  ${LINE_V}"
+    render_menu_items "$selected" "$install_status" "$animate"
+    echo "  ${LINE_V}"
+    echo "  ${CYAN}${LINE_BL}${SEP}${LINE_BR}${RESET}"
+    echo ""
+    printf "  ${DIM}↑↓ 选择  Enter 确认  Q 退出${RESET}"
+}
+
+# 动态主菜单
+dynamic_menu() {
+    local current_status
+    local install_status
+    local selected=0
+    local total_items
+    local initial_dir
+    local saved_tty
+    initial_dir=$(pwd)
+
+    # 切换到项目目录（使 docker compose 命令正常运行）
+    cd "$PROJECT_DIR"
+
+    # 全局禁用 echo，防止按住方向键时残留字节被回显
+    saved_tty=$(stty -g 2>/dev/null)
+    stty -echo 2>/dev/null
+
+    # ==== 首次绘制：带逐行动画效果 ====
+    # 先快速绘制静态内容（横幅+状态）
+    current_status=$(get_container_status)
+    install_status=$(check_installed)
+    # 第一次用动画模式渲染
+    redraw_full_screen "$selected" "$install_status" "$current_status" 1
+
+    # 首次绘制后保留一点点悬停感
+    sleep 0.1
+
+    while true; do
+        # 计算总菜单项数
+        if [ "$install_status" = "not_installed" ]; then
+            total_items=2
+        else
+            total_items=9
+        fi
+
+        # 等待按键
+        read_key
+
+        case "$_KEY" in
+            up)
+                if [ "$selected" -gt 0 ]; then
+                    selected=$((selected - 1))
+                    current_status=$(get_container_status)
+                    # 方向键切换不用动画（保持响应速度）
+                    redraw_full_screen "$selected" "$install_status" "$current_status"
+                fi
+                ;;
+            down)
+                if [ "$selected" -lt $((total_items - 1)) ]; then
+                    selected=$((selected + 1))
+                    current_status=$(get_container_status)
+                    redraw_full_screen "$selected" "$install_status" "$current_status"
+                fi
+                ;;
+            enter)
+                # 显示光标，准备接收用户输入
+                echo -n "$CURSOR_SHOW"
+                echo ""
+
+                # 恢复终端 echo（交互式函数需要）
+                stty echo 2>/dev/null
+
+                # 执行选中的操作（带 spinner 的用 run_with_spinner）
+                if [ "$install_status" = "not_installed" ]; then
+                    case "$selected" in
+                        0) init_install ;;
+                        1) stty "$saved_tty" 2>/dev/null; cd "$initial_dir"; exit 0 ;;
+                    esac
+                else
+                    case "$selected" in
+                        0) show_status ;;
+                        1)
+                            run_with_spinner "正在启动服务" "docker compose -f \"$COMPOSE_FILE\" up -d 2>&1"
+                            ;;
+                        2)
+                            run_with_spinner "正在停止服务" "docker compose -f \"$COMPOSE_FILE\" down 2>&1"
+                            ;;
+                        3)
+                            run_with_spinner "正在重启服务" "docker compose -f \"$COMPOSE_FILE\" restart 2>&1"
+                            ;;
+                        4) show_account ;;
+                        5) reset_password ;;
+                        6) check_update ;;
+                        7) uninstall ;;
+                        8) stty "$saved_tty" 2>/dev/null; cd "$initial_dir"; exit 0 ;;
+                    esac
+                fi
+
+                # 重新禁用 echo（回到菜单循环）
+                stty -echo 2>/dev/null
+
+                # 操作执行完后等待确认，然后全屏重绘
+                pause
+                current_status=$(get_container_status)
+                install_status=$(check_installed)
+                redraw_full_screen "$selected" "$install_status" "$current_status"
+                ;;
+            q)
+                stty "$saved_tty" 2>/dev/null
+                echo -n "$CURSOR_SHOW"
+                cd "$initial_dir"
+                exit 0
+                ;;
+        esac
+    done
+}
+
+# 旧 main_menu 保留为别名（兼容命令行 menu 参数）
+main_menu() {
+    dynamic_menu
+}
+
+# -------------------- 全局命令注册 --------------------
+# 把脚本注册为全局命令 frpw，之后在任意目录都能运行
+register_global() {
+    # 脚本自身的完整路径
+    local script_path
+    script_path="$PROJECT_DIR/frpw"
+
+    # 如果脚本还叫 manage.sh（旧版），也兼容
+    if [ ! -f "$script_path" ]; then
+        script_path="$PROJECT_DIR/manage.sh"
+    fi
+
+    # 检查全局命令是否已存在且指向正确
+    if [ -L "$GLOBAL_BIN" ]; then
+        local current_target
+        current_target=$(readlink "$GLOBAL_BIN" 2>/dev/null)
+        if [ "$current_target" = "$script_path" ]; then
+            # 已注册且指向正确，不需要重复注册
+            return 0
+        fi
+    fi
+
+    # 执行注册
+    log INFO "注册全局命令 frpw -> $script_path"
+
+    if [ "$(id -u)" = "0" ]; then
+        ln -sf "$script_path" "$GLOBAL_BIN"
+    else
+        sudo ln -sf "$script_path" "$GLOBAL_BIN"
+    fi
+
+    if [ $? -eq 0 ]; then
+        log OK "注册成功，现在可以在任意目录运行: frpw"
+    else
+        log WARN "注册失败，可手动执行: sudo ln -sf $script_path $GLOBAL_BIN"
+    fi
+}
+
+# ==================== 安装检测 ====================
+
+# 检测项目是否已安装
+# 返回值（echo）：installed / not_installed / partial
+check_installed() {
+    local has_compose="no"
+    local has_container="no"
+
+    # 检查 docker-compose.yml 是否存在
+    if [ -f "$COMPOSE_FILE" ]; then
+        has_compose="yes"
+    fi
+
+    # 检查 frp-console 容器是否存在（运行中或已停止）
+    if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q "^${CONTAINER_NAME}$"; then
+        has_container="yes"
+    fi
+
+    if [ "$has_compose" = "yes" ] && [ "$has_container" = "yes" ]; then
+        echo "installed"
+    elif [ "$has_compose" = "yes" ]; then
+        echo "partial"
+    else
+        echo "not_installed"
+    fi
+}
+
+# ==================== 状态获取 ====================
+
+# 获取容器运行状态
+get_container_status() {
+    local status
+    status=$(docker inspect --format='{{.State.Status}}' "$CONTAINER_NAME" 2>/dev/null || echo "not_found")
+
+    if [ "$status" = "not_found" ]; then
+        echo "未安装"
+        return
+    fi
+
+    case "$status" in
+        running)
+            # 检查健康状态
+            local health
+            health=$(docker inspect --format='{{.State.Health.Status}}' "$CONTAINER_NAME" 2>/dev/null || echo "none")
+            case "$health" in
+                healthy)   echo "运行中(健康)" ;;
+                unhealthy) echo "运行中(不健康)" ;;
+                starting)  echo "启动中" ;;
+                *)         echo "运行中" ;;
+            esac
+            ;;
+        exited)  echo "已停止" ;;
+        created) echo "已创建未启动" ;;
+        paused)  echo "已暂停" ;;
+        *)       echo "$status" ;;
+    esac
+}
+
+# ==================== 功能函数 ====================
+
+# -------------------- 1. 显示状态 --------------------
+show_status() {
+    # 获取安装状态和容器状态
+    local install_status
+    install_status=$(check_installed)
+    local container_status
+    container_status=$(get_container_status)
+
+    # 根据容器状态选择圆点颜色
+    local status_dot
+    if echo "$container_status" | grep -q "运行中.*健康\|运行中(健康)"; then
+        status_dot="$DOT_OK"
+    elif echo "$container_status" | grep -q "运行中\|启动中"; then
+        status_dot="$DOT_WARN"
+    elif echo "$container_status" | grep -q "已停止\|未安装"; then
+        status_dot="$DOT_STOP"
+    else
+        status_dot="$DOT_GRAY"
+    fi
+
+    print_section "项目状态"
+
+    # 基本信息行
+    printf "  ${CYAN}${LINE_V}${RESET}  %-12s %s\n" "项目目录" "$PROJECT_DIR"
+
+    case "$install_status" in
+        installed)     printf "  ${CYAN}${LINE_V}${RESET}  %-12s ${GREEN}已安装${RESET}\n" "安装状态" ;;
+        partial)       printf "  ${CYAN}${LINE_V}${RESET}  %-12s ${YELLOW}部分安装${RESET}\n" "安装状态" ;;
+        not_installed) printf "  ${CYAN}${LINE_V}${RESET}  %-12s ${RED}未安装${RESET}\n" "安装状态" ;;
+    esac
+
+    printf "  ${CYAN}${LINE_V}${RESET}  %-12s %s %s\n" "容器状态" "$status_dot" "$container_status"
+
+    # 如果容器在运行，显示详细信息
+    if docker inspect --format='{{.State.Status}}' "$CONTAINER_NAME" 2>/dev/null | grep -q "running"; then
+        local started_at
+        started_at=$(docker inspect --format='{{.State.StartedAt}}' "$CONTAINER_NAME" 2>/dev/null | cut -d'.' -f1 | tr 'T' ' ')
+        printf "  ${CYAN}${LINE_V}${RESET}  %-12s %s\n" "启动时间" "$started_at"
+
+        local ports
+        ports=$(docker port "$CONTAINER_NAME" 2>/dev/null | tr '\n' ' ')
+        if [ -n "$ports" ]; then
+            printf "  ${CYAN}${LINE_V}${RESET}  %-12s %s\n" "端口映射" "$ports"
+        fi
+
+        local image
+        image=$(docker inspect --format='{{.Config.Image}}' "$CONTAINER_NAME" 2>/dev/null)
+        printf "  ${CYAN}${LINE_V}${RESET}  %-12s %s\n" "使用镜像" "$image"
+
+        local health
+        health=$(docker inspect --format='{{.State.Health.Status}}' "$CONTAINER_NAME" 2>/dev/null || echo "无")
+        printf "  ${CYAN}${LINE_V}${RESET}  %-12s %s\n" "健康检查" "$health"
+    fi
+
+    # 空行分隔
+    printf "  ${CYAN}${LINE_V}${RESET}\n"
+
+    # 访问地址
+    local port
+    port=$(grep '^PORT=' "$ENV_FILE" 2>/dev/null | cut -d'=' -f2 | tr -d '[:space:]')
+    port=${port:-7600}
+    local host_ip
+    host_ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+    [ -z "$host_ip" ] && host_ip="127.0.0.1"
+    printf "  ${CYAN}${LINE_V}${RESET}  %-12s ${BLUE}http://%s:%s${RESET}\n" "访问地址" "$host_ip" "$port"
+
+    # FRPC 容器数量
+    local frpc_count
+    frpc_count=$(docker ps --format '{{.Names}}' 2>/dev/null | grep "^FRPC-" | wc -l)
+    printf "  ${CYAN}${LINE_V}${RESET}  %-12s %s 个运行中\n" "frpc容器" "$frpc_count"
+
+    echo "  ${CYAN}${LINE_BL}${SEP}${LINE_BR}${RESET}"
+}
+
+# -------------------- 2. 启动服务 --------------------
+start_service() {
+    echo ""
+    log INFO "启动 FRP Console 服务..."
+
+    local install_status
+    install_status=$(check_installed)
+
+    if [ "$install_status" = "not_installed" ]; then
+        log ERROR "项目未安装，请先执行初始化安装"
+        return 1
+    fi
+
+    # 检查是否已经在运行
+    local current_status
+    current_status=$(get_container_status)
+    if echo "$current_status" | grep -q "运行中"; then
+        log WARN "服务已经在运行中"
+        return 0
+    fi
+
+    cd "$PROJECT_DIR"
+    if docker compose up -d 2>&1; then
+        log OK "服务已启动"
+        sleep 2
+        show_status
+    else
+        log ERROR "启动失败，请检查日志：docker logs $CONTAINER_NAME"
+        return 1
+    fi
+}
+
+# -------------------- 3. 停止服务 --------------------
+stop_service() {
+    echo ""
+    log INFO "停止 FRP Console 服务..."
+
+    local current_status
+    current_status=$(get_container_status)
+    if echo "$current_status" | grep -q "未安装\|已停止"; then
+        log WARN "服务未在运行"
+        return 0
+    fi
+
+    cd "$PROJECT_DIR"
+    if docker compose down 2>&1; then
+        log OK "服务已停止"
+        log INFO "注意：FRPC-* 容器不受影响，继续独立运行"
+    else
+        log ERROR "停止失败"
+        return 1
+    fi
+}
+
+# -------------------- 4. 重启服务 --------------------
+restart_service() {
+    echo ""
+    log INFO "重启 FRP Console 服务..."
+
+    cd "$PROJECT_DIR"
+    if docker compose restart 2>&1; then
+        log OK "服务已重启"
+        sleep 3
+        show_status
+    else
+        log ERROR "重启失败，尝试先停止再启动..."
+        docker compose down 2>&1
+        sleep 1
+        docker compose up -d 2>&1
+        log OK "服务已重新启动"
+    fi
+}
+
+# -------------------- 5. 查看账号 --------------------
+show_account() {
+    if [ ! -f "$ENV_FILE" ]; then
+        log ERROR "未找到 .env 文件"
+        return 1
+    fi
+
+    # 读取用户名
+    local username
+    username=$(grep '^ADMIN_USER=' "$ENV_FILE" 2>/dev/null | cut -d'=' -f2 | tr -d '[:space:]')
+    username=${username:-admin}
+
+    # 检查密码来源
+    local password_source
+    if grep -q '^ADMIN_PASSWORD=' "$ENV_FILE" 2>/dev/null; then
+        local password_value
+        password_value=$(grep '^ADMIN_PASSWORD=' "$ENV_FILE" | cut -d'=' -f2-)
+        if [ -z "$password_value" ]; then
+            password_source="${YELLOW}未设置（随机生成）${RESET}"
+        else
+            password_source="${GREEN}.env 文件配置${RESET}"
+        fi
+    else
+        password_source="${YELLOW}未设置（随机生成）${RESET}"
+    fi
+
+    print_section "账号信息"
+    printf "  ${CYAN}${LINE_V}${RESET}  %-12s ${BOLD}%s${RESET}\n" "用户名" "$username"
+    printf "  ${CYAN}${LINE_V}${RESET}  %-12s ${DIM}已加密存储${RESET}\n" "密码"
+    printf "  ${CYAN}${LINE_V}${RESET}  %-12s %s\n" "密码来源" "$password_source"
+    printf "  ${CYAN}${LINE_V}${RESET}\n"
+    printf "  ${CYAN}${LINE_V}${RESET}  ${DIM}修改密码请选择菜单 [6] 重置密码${RESET}\n"
+    echo "  ${CYAN}${LINE_BL}${SEP}${LINE_BR}${RESET}"
+}
+
+# -------------------- 6. 重置密码 --------------------
+reset_password() {
+    print_section "重置密码"
+
+    if [ ! -f "$ENV_FILE" ]; then
+        log ERROR "未找到 .env 文件，无法重置密码"
+        return 1
+    fi
+
+    # 读取当前用户名
+    local username
+    username=$(grep '^ADMIN_USER=' "$ENV_FILE" 2>/dev/null | cut -d'=' -f2 | tr -d '[:space:]')
+    username=${username:-admin}
+
+    printf "  ${CYAN}${LINE_V}${RESET}  当前用户名: ${GREEN}${username}${RESET}\n"
+    echo "  ${CYAN}${LINE_BL}${SEP}${LINE_BR}${RESET}"
+    echo ""
+
+    # 询问是否修改用户名
+    read -rp "是否修改用户名？(默认保持 ${username}): " new_username
+    if [ -n "$new_username" ]; then
+        username=$(echo "$new_username" | tr -d '[:space:]')
+    fi
+
+    # 输入新密码（不回显）
+    while true; do
+        echo ""
+        read -srp "请输入新密码（至少 8 位）: " password1
+        echo ""
+        read -srp "请再次输入新密码: " password2
+        echo ""
+
+        if [ "$password1" != "$password2" ]; then
+            log ERROR "两次输入的密码不一致，请重试"
+            continue
+        fi
+
+        if [ ${#password1} -lt 8 ]; then
+            log ERROR "密码长度不足 8 位，请重试"
+            continue
+        fi
+
+        if [ -z "$password1" ]; then
+            log ERROR "密码不能为空"
+            continue
+        fi
+
+        break
+    done
+
+    # 更新 .env 文件
+    log INFO "正在更新配置..."
+
+    # 更新 ADMIN_USER
+    if grep -q '^ADMIN_USER=' "$ENV_FILE"; then
+        if [ "$(uname)" = "Darwin" ]; then
+            sed -i '' "s/^ADMIN_USER=.*/ADMIN_USER=${username}/" "$ENV_FILE"
+        else
+            sed -i "s/^ADMIN_USER=.*/ADMIN_USER=${username}/" "$ENV_FILE"
+        fi
+    else
+        echo "ADMIN_USER=${username}" >> "$ENV_FILE"
+    fi
+
+    # 更新 ADMIN_PASSWORD
+    if grep -q '^ADMIN_PASSWORD=' "$ENV_FILE"; then
+        if [ "$(uname)" = "Darwin" ]; then
+            sed -i '' "s/^ADMIN_PASSWORD=.*/ADMIN_PASSWORD=${password1}/" "$ENV_FILE"
+        else
+            sed -i "s/^ADMIN_PASSWORD=.*/ADMIN_PASSWORD=${password1}/" "$ENV_FILE"
+        fi
+    else
+        echo "ADMIN_PASSWORD=${password1}" >> "$ENV_FILE"
+    fi
+
+    log OK "账号密码已更新"
+
+    # 如果服务在运行，需要重启使新密码生效
+    local current_status
+    current_status=$(get_container_status)
+    if echo "$current_status" | grep -q "运行中"; then
+        echo ""
+        log INFO "服务正在运行，需要重启使新密码生效"
+        read -rp "是否立即重启服务？(Y/n): " confirm
+        if [ -z "$confirm" ] || [ "$confirm" = "Y" ] || [ "$confirm" = "y" ]; then
+            restart_service
+        else
+            log WARN "请稍后手动重启服务使新密码生效"
+        fi
+    fi
+
+    echo ""
+    log OK "重置完成"
+    echo "  用户名: ${GREEN}${username}${RESET}"
+    echo "  密码:   ${DIM}（已设置，不显示）${RESET}"
+}
+
+# -------------------- 7. 检查更新（预留） --------------------
+check_update() {
+    print_section "检查更新"
+    printf "  ${CYAN}${LINE_V}${RESET}  ${YELLOW}此功能开发中，目前为预留接口${RESET}\n"
+    printf "  ${CYAN}${LINE_V}${RESET}\n"
+    printf "  ${CYAN}${LINE_V}${RESET}  ${BOLD}计划功能：${RESET}\n"
+    printf "  ${CYAN}${LINE_V}${RESET}    1. 检查 GitHub 仓库是否有新版本\n"
+    printf "  ${CYAN}${LINE_V}${RESET}    2. 对比当前版本与最新版本\n"
+    printf "  ${CYAN}${LINE_V}${RESET}    3. 一键拉取更新并重新构建\n"
+    printf "  ${CYAN}${LINE_V}${RESET}\n"
+    printf "  ${CYAN}${LINE_V}${RESET}  ${DIM}如需手动更新：${RESET}\n"
+    printf "  ${CYAN}${LINE_V}${RESET}    ${GREEN}git pull origin main${RESET}\n"
+    printf "  ${CYAN}${LINE_V}${RESET}    ${GREEN}./deploy.sh${RESET}\n"
+    echo "  ${CYAN}${LINE_BL}${SEP}${LINE_BR}${RESET}"
+}
+
+# -------------------- 8. 卸载管理工具 --------------------
+uninstall() {
+    echo ""
+    echo "${BOLD}========== 卸载 FRP Console ==========${RESET}"
+    echo ""
+    echo "${YELLOW}警告：此操作将卸载 FRP Console 管理控制台。${RESET}"
+    echo ""
+    echo "${GREEN}以下内容会被保留（不受影响）：${RESET}"
+    echo "  - 所有 FRPC-* 容器（继续独立运行）"
+    echo "  - /opt/frpc/ 配置文件"
+    echo "  - data/ 数据库文件"
+    echo "  - logs/ 日志文件"
+    echo ""
+    echo "${RED}以下内容会被删除：${RESET}"
+    echo "  - frp-console 容器"
+    echo "  - frp-console 镜像"
+    echo ""
+
+    # 二次确认
+    read -rp "${RED}确认要卸载吗？输入 yes 继续，其他取消: ${RESET}" confirm
+    if [ "$confirm" != "yes" ]; then
+        log INFO "已取消卸载"
+        return 0
+    fi
+
+    echo ""
+    log INFO "开始卸载..."
+
+    # 第一步：停止并删除 frp-console 容器
+    if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q "^${CONTAINER_NAME}$"; then
+        log INFO "停止并删除 frp-console 容器..."
+        cd "$PROJECT_DIR"
+        docker compose down 2>&1 || docker rm -f "$CONTAINER_NAME" 2>/dev/null
+        log OK "容器已删除"
+    else
+        log INFO "未找到 frp-console 容器，跳过"
+    fi
+
+    # 第二步：删除 frp-console 镜像
+    local image_name
+    image_name=$(docker images --format '{{.Repository}}' 2>/dev/null | grep "frp-console" | head -1)
+    if [ -n "$image_name" ]; then
+        log INFO "删除镜像 $image_name..."
+        docker rmi "$image_name" 2>/dev/null || log WARN "镜像删除失败（可能被其他容器引用）"
+        log OK "镜像已删除"
+    else
+        log INFO "未找到 frp-console 镜像，跳过"
+    fi
+
+    # 第三步：显示保留的内容
+    echo ""
+    log OK "卸载完成"
+    echo ""
+    echo "${GREEN}保留的内容：${RESET}"
+
+    # 显示保留的 FRPC 容器
+    local frpc_containers
+    frpc_containers=$(docker ps --format '{{.Names}}' 2>/dev/null | grep "^FRPC-" || echo "")
+    if [ -n "$frpc_containers" ]; then
+        echo "  FRPC 容器（仍在运行）："
+        echo "$frpc_containers" | while read -r name; do
+            echo "    - $name"
+        done
+    else
+        echo "  FRPC 容器：无"
+    fi
+
+    # 显示保留的配置文件
+    if [ -d /opt/frpc ]; then
+        local config_count
+        config_count=$(ls /opt/frpc/frpc-*.toml 2>/dev/null | wc -l)
+        echo "  配置文件：/opt/frpc/（${config_count} 个文件）"
+    fi
+
+    # 显示保留的数据
+    if [ -d "$PROJECT_DIR/data" ]; then
+        echo "  数据库：$PROJECT_DIR/data/"
+    fi
+    if [ -d "$PROJECT_DIR/logs" ]; then
+        echo "  日志：$PROJECT_DIR/logs/"
+    fi
+
+    echo ""
+    echo "${DIM}如需重新安装，请执行：./deploy.sh${RESET}"
+    echo "${BOLD}====================================${RESET}"
+}
+
+# -------------------- 9. 初始化安装 --------------------
+init_install() {
+    echo ""
+    echo "${BOLD}========== 初始化安装 ==========${RESET}"
+    echo ""
+    echo "欢迎使用 FRP Console 管理工具"
+    echo "首次使用需要设置管理员账号和密码"
+    echo ""
+
+    # 检查是否有 .env，没有则从 .env.example 复制
+    if [ ! -f "$ENV_FILE" ]; then
+        if [ -f "$PROJECT_DIR/.env.example" ]; then
+            cp "$PROJECT_DIR/.env.example" "$ENV_FILE"
+            log OK "已从 .env.example 创建 .env"
+        else
+            log ERROR "未找到 .env.example，无法初始化"
+            return 1
+        fi
+    fi
+
+    # 设置用户名
+    echo ""
+    read -rp "请输入管理员用户名（默认 admin）: " username
+    username=$(echo "$username" | tr -d '[:space:]')
+    username=${username:-admin}
+
+    # 设置密码
+    while true; do
+        echo ""
+        read -srp "请输入管理员密码（至少 8 位）: " password1
+        echo ""
+        read -srp "请再次输入密码: " password2
+        echo ""
+
+        if [ "$password1" != "$password2" ]; then
+            log ERROR "两次输入的密码不一致，请重试"
+            continue
+        fi
+
+        if [ ${#password1} -lt 8 ]; then
+            log ERROR "密码长度不足 8 位，请重试"
+            continue
+        fi
+
+        if [ -z "$password1" ]; then
+            log ERROR "密码不能为空"
+            continue
+        fi
+
+        break
+    done
+
+    # 写入 .env
+    log INFO "保存配置..."
+
+    # 更新或添加 ADMIN_USER
+    if grep -q '^ADMIN_USER=' "$ENV_FILE"; then
+        if [ "$(uname)" = "Darwin" ]; then
+            sed -i '' "s/^ADMIN_USER=.*/ADMIN_USER=${username}/" "$ENV_FILE"
+        else
+            sed -i "s/^ADMIN_USER=.*/ADMIN_USER=${username}/" "$ENV_FILE"
+        fi
+    else
+        echo "ADMIN_USER=${username}" >> "$ENV_FILE"
+    fi
+
+    # 更新或添加 ADMIN_PASSWORD
+    if grep -q '^ADMIN_PASSWORD=' "$ENV_FILE"; then
+        if [ "$(uname)" = "Darwin" ]; then
+            sed -i '' "s|^ADMIN_PASSWORD=.*|ADMIN_PASSWORD=${password1}|" "$ENV_FILE"
+        else
+            sed -i "s|^ADMIN_PASSWORD=.*|ADMIN_PASSWORD=${password1}|" "$ENV_FILE"
+        fi
+    else
+        echo "ADMIN_PASSWORD=${password1}" >> "$ENV_FILE"
+    fi
+
+    log OK "账号密码已保存"
+    echo ""
+
+    # 询问是否立即部署
+    echo "账号设置完成，接下来需要构建并启动服务。"
+    read -rp "是否立即部署？(Y/n): " confirm
+    if [ -z "$confirm" ] || [ "$confirm" = "Y" ] || [ "$confirm" = "y" ]; then
+        log INFO "开始部署..."
+        if [ -f "$DEPLOY_SCRIPT" ]; then
+            bash "$DEPLOY_SCRIPT"
+        else
+            log ERROR "未找到 deploy.sh，请手动运行：docker compose up -d --build"
+        fi
+    else
+        log INFO "稍后可运行 ./deploy.sh 完成部署"
+    fi
+}
+
+# 主菜单（入口）
+main_menu() {
+    dynamic_menu
+}
+
+# ==================== 入口 ====================
+
+# 检查 docker 命令
+if ! command -v docker >/dev/null 2>&1; then
+    die "未找到 docker 命令，请先安装 Docker"
+fi
+
+# 支持命令行参数直接执行（跳过菜单）
+if [ $# -gt 0 ]; then
+    case "$1" in
+        status)         show_status ;;
+        start)          start_service ;;
+        stop)           stop_service ;;
+        restart)        restart_service ;;
+        account)        show_account ;;
+        reset-password) reset_password ;;
+        update)         check_update ;;
+        uninstall)      uninstall ;;
+        init)           init_install ;;
+        register)       register_global ;;
+        menu)           main_menu ;;
+        *)
+            echo "用法: frpw [命令]"
+            echo ""
+            echo "命令列表："
+            echo "  （无参数）       进入交互式菜单"
+            echo "  status           查看项目状态"
+            echo "  start            启动服务"
+            echo "  stop             停止服务"
+            echo "  restart          重启服务"
+            echo "  account          查看账号信息"
+            echo "  reset-password   重置密码"
+            echo "  update           检查更新（预留）"
+            echo "  uninstall        卸载管理工具"
+            echo "  init             初始化安装"
+            echo "  register         重新注册全局命令"
+            exit 1
+            ;;
+    esac
+    exit 0
+fi
+
+# 无参数时：先自动注册全局命令，再进入交互式菜单
+register_global
+main_menu
