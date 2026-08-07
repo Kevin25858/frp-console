@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, ReactNode } from "react";
+import { useState, useEffect, useRef, useMemo, ReactNode } from "react";
 import { useApi } from "@/hooks/useApi.ts";
 import { apiFetch } from "@/lib/api.ts";
 import { useToast } from "@/contexts/toast-context.tsx";
@@ -10,7 +10,8 @@ import {
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/dialog.tsx";
-import { Trash2, Loader2, X } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert.tsx";
+import { Trash2, Loader2, X, AlertTriangle, XCircle } from "lucide-react";
 
 interface ViewLogsDialogProps {
     clientId: number;
@@ -47,19 +48,22 @@ export function ViewLogsDialog({ clientId, clientName, children }: ViewLogsDialo
 
     const logs = logsData?.logs || '';
 
-    const handleClearLogs = async () => {
-        setIsClearing(true);
-        try {
-            const res = await apiFetch(`/clients/${clientId}/clear-logs`, { method: 'POST' });
-            success(res.message || '日志已清空');
-            // 等待重启完成后重新加载日志
-            setTimeout(() => fetchData(), 1000);
-        } catch (err: unknown) {
-            const msg = (err as { body?: { error?: string } })?.body?.error || '清空日志失败';
-            toastError(msg);
-        } finally {
-            setIsClearing(false);
-        }
+    // 统计日志中的错误 / 警告，用于顶部提示
+    const logStats = useMemo(() => {
+        // eslint-disable-next-line no-control-regex
+        const plain = logs.replace(/\x1b\[[0-9;]*m/g, '');
+        const errors = (plain.match(/\[E\]/g) || []).length;
+        const warnings = (plain.match(/\[W\]/g) || []).length;
+        const hasErrorKeyword = /error|错误|失败|exception|panic/i.test(plain);
+        return { errors, warnings, hasErrorKeyword };
+    }, [logs]);
+
+    // 日志级别内联 SVG 图标（lucide 同款路径，避免 emoji）
+    const ICONS = {
+        error: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>',
+        warn: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>',
+        info: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
+        debug: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" fill="currentColor"/></svg>',
     };
 
     const processLogs = (logContent: string): string => {
@@ -68,28 +72,32 @@ export function ViewLogsDialog({ clientId, clientName, children }: ViewLogsDialo
             // frpc 日志格式: date host frpc[pid]: timestamp [LEVEL] [file:line] message
             // systemd journal 格式: May 01 19:04:45 host frpc[pid]: ...
 
+            // 去掉 ANSI 颜色转义码（\x1b[1;34m 等），避免终端颜色码污染显示
+            // eslint-disable-next-line no-control-regex
+            const clean = line.replace(/\x1b\[[0-9;]*m/g, '');
+
             // 转义 HTML
-            let html = line
+            let html = clean
                 .replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;');
 
-            // 高亮日志级别
+            // 级别标记替换为带颜色的图标
             html = html.replace(
                 /\[E\]/g,
-                '<span class="log-error">[E]</span>'
+                `<span class="log-level log-level-error">${ICONS.error}</span>`
             );
             html = html.replace(
                 /\[W\]/g,
-                '<span class="log-warn">[W]</span>'
+                `<span class="log-level log-level-warn">${ICONS.warn}</span>`
             );
             html = html.replace(
                 /\[I\]/g,
-                '<span class="log-info">[I]</span>'
+                `<span class="log-level log-level-info">${ICONS.info}</span>`
             );
             html = html.replace(
                 /\[D\]/g,
-                '<span class="log-debug">[D]</span>'
+                `<span class="log-level log-level-debug">${ICONS.debug}</span>`
             );
 
             // 高亮时间戳 (journal 格式: May 01 19:04:45)
@@ -106,6 +114,21 @@ export function ViewLogsDialog({ clientId, clientName, children }: ViewLogsDialo
 
             return html;
         }).join('\n');
+    };
+
+    const handleClearLogs = async () => {
+        setIsClearing(true);
+        try {
+            const res = await apiFetch(`/clients/${clientId}/clear-logs`, { method: 'POST' });
+            success(res.message || '日志已清空');
+            // 等待重启完成后重新加载日志
+            setTimeout(() => fetchData(), 1000);
+        } catch (err: unknown) {
+            const msg = (err as { body?: { error?: string } })?.body?.error || '清空日志失败';
+            toastError(msg);
+        } finally {
+            setIsClearing(false);
+        }
     };
 
     return (
@@ -146,6 +169,19 @@ export function ViewLogsDialog({ clientId, clientName, children }: ViewLogsDialo
                         </div>
                     </DialogTitle>
                 </DialogHeader>
+                {logStats.hasErrorKeyword || logStats.errors > 0 ? (
+                    <Alert variant="destructive" className="mb-3 gap-2">
+                        <XCircle className="h-4 w-4" />
+                        <AlertDescription>
+                            检测到{logStats.errors > 0 ? ` ${logStats.errors} 条错误日志，` : ' '}frpc 运行异常，请检查配置文件后重启客户端。
+                        </AlertDescription>
+                    </Alert>
+                ) : logStats.warnings > 0 ? (
+                    <Alert className="mb-3 gap-2 border-yellow-500/50 text-yellow-600 dark:text-yellow-500">
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertDescription>检测到 {logStats.warnings} 条警告日志，请留意运行状态。</AlertDescription>
+                    </Alert>
+                ) : null}
                 <div
                     ref={logsContainerRef}
                     className="mt-4 bg-muted text-muted-foreground rounded-md p-4 h-96 overflow-auto font-mono text-sm"
@@ -172,21 +208,20 @@ export function ViewLogsDialog({ clientId, clientName, children }: ViewLogsDialo
                 .log-host {
                     color: #868e96;
                 }
-                .log-error {
-                    color: #ff6b6b;
-                    font-weight: bold;
+                .log-level {
+                    display: inline-flex;
+                    align-items: center;
+                    vertical-align: middle;
+                    margin-right: 4px;
                 }
-                .log-warn {
-                    color: #fcc419;
-                    font-weight: bold;
+                .log-level svg {
+                    width: 14px;
+                    height: 14px;
                 }
-                .log-info {
-                    color: #51cf66;
-                    font-weight: bold;
-                }
-                .log-debug {
-                    color: #868e96;
-                }
+                .log-level-error { color: #ff6b6b; }
+                .log-level-warn { color: #fcc419; }
+                .log-level-info { color: #51cf66; }
+                .log-level-debug { color: #868e96; }
                 .log-error-text {
                     color: #ff6b6b;
                 }
