@@ -26,6 +26,7 @@ frpc 以 fatedier/frpc 容器方式运行：
     修改配置只能通过 Web 控制台（写宿主机的文件）。
 """
 import os
+import re
 import json
 import urllib.request
 from docker import from_env
@@ -480,6 +481,10 @@ class ProcessService:
                 # frpc 进程可能崩了但容器还活着
                 if health == 'unhealthy':
                     return 'error'
+                # 容器在跑但日志报错（如代理启动失败）也视为异常
+                # 这样仪表盘/列表能及时反映 frpc 运行问题
+                if ProcessService._has_log_error(client_id):
+                    return 'error'
                 return 'running'
 
             if status == 'exited' or status == 'created':
@@ -491,6 +496,48 @@ class ProcessService:
             return 'stopped'
         except Exception:
             return 'stopped'
+
+    # 判定日志是否含错误的模式（小写匹配）
+    _LOG_ERROR_PATTERNS = ('[e]', 'error', 'failed', 'exception', 'panic', 'fatal', '无效', '错误', '失败')
+
+    @staticmethod
+    def _read_container_log_text(container, tail):
+        """读取容器日志并去掉 ANSI 颜色码，返回纯文本"""
+        try:
+            data = container.logs(tail=tail, timestamps=False)
+        except APIError:
+            return ''
+        if isinstance(data, bytes):
+            text = data.decode('utf-8', errors='replace')
+        else:
+            text = str(data)
+        # 去掉 ANSI 颜色转义码，避免影响关键字匹配
+        return re.sub(r'\x1b\[[0-9;]*m', '', text)
+
+    @staticmethod
+    def _has_log_error(client_id):
+        """检查容器近期日志是否包含错误内容"""
+        container = ProcessService._get_container(client_id)
+        if not container:
+            return False
+        text = ProcessService._read_container_log_text(container, tail=100).lower()
+        if not text:
+            return False
+        return any(pattern in text for pattern in ProcessService._LOG_ERROR_PATTERNS)
+
+    @staticmethod
+    def get_error_message(client_id):
+        """提取容器日志中最近一条错误信息，供前端展示"""
+        container = ProcessService._get_container(client_id)
+        if not container:
+            return ''
+        text = ProcessService._read_container_log_text(container, tail=200)
+        for line in reversed(text.splitlines()):
+            low = line.lower()
+            if any(pattern in low for pattern in ProcessService._LOG_ERROR_PATTERNS):
+                line = line.strip()
+                return line[:300]
+        return 'frpc 运行异常，请查看日志'
 
     @staticmethod
     def get_logs(client_id, lines=1000):

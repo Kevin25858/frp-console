@@ -170,7 +170,7 @@ export default function ClientListPage() {
                                             运行中
                                         </Badge>
                                     ) : client.status === 'error' ? (
-                                        <Badge variant="destructive" className="gap-1">
+                                        <Badge variant="destructive" className="gap-1" title={client.error_msg}>
                                             <AlertCircle className="h-3 w-3" />
                                             异常
                                         </Badge>

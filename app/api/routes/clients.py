@@ -66,9 +66,12 @@ def get_clients():
     for c in clients:
         try:
             c['status'] = ProcessService.get_status(c['id'])
+            # 异常时附带最近一条错误信息，供前端展示
+            c['error_msg'] = ProcessService.get_error_message(c['id']) if c['status'] == 'error' else ''
         except Exception as e:
             # 查状态失败不影响整个列表，记日志后用旧状态
             ColorLogger.warning('获取客户端 ' + str(c['id']) + ' 状态失败: ' + str(e), 'Clients')
+            c['error_msg'] = ''
 
     return jsonify(clients)
 

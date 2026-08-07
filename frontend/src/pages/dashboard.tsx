@@ -55,6 +55,11 @@ export default function DashboardPage() {
         return clients.slice(0, 8);
     }, [clients]);
 
+    const errorClients = useMemo(() => {
+        if (!Array.isArray(clients)) return [];
+        return clients.filter(c => c.status === 'error');
+    }, [clients]);
+
     const handleBatchEnable = async (enabled: boolean) => {
         try {
             await apiFetch('/clients/batch-enable', {
@@ -156,6 +161,40 @@ export default function DashboardPage() {
                 </Card>
             </div>
 
+            {/* 异常客户端 */}
+            {errorClients.length > 0 && (
+                <Card className="border-red-200 shadow-sm flex-shrink-0">
+                    <CardHeader className="pb-2 pt-3 px-4">
+                        <CardTitle className="flex items-center gap-2 text-base text-red-600">
+                            <AlertTriangle className="h-4 w-4" />
+                            异常客户端
+                        </CardTitle>
+                        <CardDescription className="text-xs text-red-400">
+                            共 {errorClients.length} 个客户端日志存在错误，点击项目可查看日志详情
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="px-4 pb-4 space-y-2">
+                        {errorClients.map((client) => (
+                            <div
+                                key={client.id}
+                                className="flex items-start gap-3 p-3 rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/20"
+                            >
+                                <XCircle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+                                <div className="min-w-0 flex-1">
+                                    <div className="font-medium text-sm">{client.name}</div>
+                                    <div className="text-xs text-red-600 dark:text-red-400 font-mono truncate mt-0.5" title={client.error_msg}>
+                                        {client.error_msg || 'frpc 运行异常，请查看日志'}
+                                    </div>
+                                </div>
+                                <span className="text-xs text-muted-foreground flex-shrink-0">
+                                    {client.server_addr}:{client.remote_port}
+                                </span>
+                            </div>
+                        ))}
+                    </CardContent>
+                </Card>
+            )}
+
             {/* 快捷操作和最近客户端 */}
             <div className="grid gap-3 md:grid-cols-2 flex-1 min-h-0">
                 <Card className="flex flex-col">
@@ -230,9 +269,15 @@ export default function DashboardPage() {
                                             )}
                                             <span className="font-medium">{client.name}</span>
                                         </div>
-                                        <span className="text-sm text-muted-foreground">
-                                            {client.server_addr}:{client.remote_port}
-                                        </span>
+                                        {client.status === 'error' ? (
+                                            <span className="text-xs text-red-500 font-mono truncate max-w-[40%]" title={client.error_msg}>
+                                                {client.error_msg || '运行异常'}
+                                            </span>
+                                        ) : (
+                                            <span className="text-sm text-muted-foreground">
+                                                {client.server_addr}:{client.remote_port}
+                                            </span>
+                                        )}
                                     </div>
                                 ))}
                             </div>

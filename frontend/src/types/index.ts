@@ -17,6 +17,7 @@ export interface Client {
   token?: string; // 可选的认证令牌
   user?: string; // 可选的用户名
   status: ClientStatus;
+  error_msg?: string; // 异常时的最近错误信息
   enabled: boolean;
   frp_version?: string; // frp 版本（留空表示自动取最新）
   image?: string; // 自定义镜像
