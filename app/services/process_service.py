@@ -135,6 +135,16 @@ class ProcessService:
         ).fetchone()
 
     @staticmethod
+    def _clear_config_dirty(client_id):
+        """清除「配置修改但未重启」标记（容器成功启动/重启后调用）"""
+        try:
+            db = get_db()
+            db.execute('UPDATE clients SET config_dirty = 0 WHERE id = ?', (client_id,))
+            db.commit()
+        except Exception as e:
+            ColorLogger.warning('清除客户端 ' + str(client_id) + ' config_dirty 标记失败: ' + str(e), 'Process')
+
+    @staticmethod
     def _resolve_image(client):
         """
         解析镜像和版本号
@@ -407,6 +417,8 @@ class ProcessService:
         if ok:
             # 启动成功后把实际用的镜像/版本写回数据库
             ProcessService._write_back_version(client_id, image, version)
+            # 重启后配置已生效，清除「未重启」标记
+            ProcessService._clear_config_dirty(client_id)
             ColorLogger.success('客户端 ' + str(client_id) + ' 容器已启动 (' + image + ')', 'Process')
             return True, '启动成功'
 
@@ -452,6 +464,8 @@ class ProcessService:
         ok, msg = ProcessService._run_container(client_id, image)
         if ok:
             ProcessService._write_back_version(client_id, image, version)
+            # 重启后配置已生效，清除「未重启」标记
+            ProcessService._clear_config_dirty(client_id)
             ColorLogger.success('客户端 ' + str(client_id) + ' 容器已重启 (' + image + ')', 'Process')
             return True, '重启成功'
 
@@ -546,8 +560,9 @@ class ProcessService:
         """
         判断配置是否在容器启动后被修改过（需要重启才能生效）
 
-        原理：配置文件 mtime > 容器启动时间 且容器正在运行。
-        这样无论配置是通过 Web 控制台还是直接编辑文件修改的都能识别。
+        两种途径都会标记：
+            1. Web 控制台保存配置 -> clients.config_dirty 置 1，重启后清除
+            2. 直接编辑 /opt/frpc/frpc-*.toml -> 配置文件 mtime > 容器启动时间
         """
         try:
             container = ProcessService._get_container(client_id)
@@ -557,6 +572,18 @@ class ProcessService:
             state = container.attrs.get('State', {})
             if state.get('Status') != 'running':
                 return False
+
+            # 途径 1：Web 保存过配置且未重启
+            record = ProcessService._get_client_record(client_id)
+            if record:
+                try:
+                    if record['config_dirty']:
+                        return True
+                except (KeyError, IndexError):
+                    # config_dirty 字段不存在视为干净（旧库），走 mtime 兜底
+                    pass
+
+            # 途径 2：配置文件被直接编辑过（mtime 晚于容器启动）
             started_at = state.get('StartedAt', '')
             if not started_at:
                 return False

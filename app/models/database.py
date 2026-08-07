@@ -32,6 +32,7 @@ NEED_CHECK_COLUMNS = [
     ('user', 'TEXT'),
     ('frp_version', "TEXT DEFAULT 'v0.61.1'"),
     ('image', 'TEXT'),
+    ('config_dirty', 'INTEGER DEFAULT 0'),
 ]
 
 

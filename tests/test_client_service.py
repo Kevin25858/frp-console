@@ -313,3 +313,34 @@ class TestProcessService:
             # 停止后：不算需要重启
             ProcessService.stop(client_id)
             assert ProcessService.needs_restart(client_id) is False
+
+    def test_update_config_writes_file_and_marks_restart(self, test_app, mock_docker):
+        """测试 Web 保存配置会同步写文件，运行中的客户端应标记未重启"""
+        import os
+
+        with test_app.app_context():
+            success, result = ClientService.create_client({
+                'name': 'update-config-test',
+                'config_content': VALID_TOML_CONFIG,
+                'frp_version': 'v0.61.1',
+            })
+            assert success
+            client_id = result['id']
+
+            ok, msg = ProcessService.start(client_id)
+            assert ok, f"启动应成功: {msg}"
+            assert ProcessService.needs_restart(client_id) is False
+
+            # 模拟 Web 界面保存新配置（加一行注释让内容不同）
+            new_config = VALID_TOML_CONFIG + '\n# 修改于测试\n'
+            ok, msg = ClientService.update_client_config(client_id, new_config)
+            assert ok, f"更新配置应成功: {msg}"
+
+            # 配置文件应已同步写入
+            config_path = ProcessService._config_path(client_id)
+            assert os.path.exists(config_path)
+            with open(config_path, 'r', encoding='utf-8') as f:
+                assert '# 修改于测试' in f.read()
+
+            # 运行中的容器应被标记为需要重启
+            assert ProcessService.needs_restart(client_id) is True

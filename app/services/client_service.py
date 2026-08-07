@@ -385,9 +385,13 @@ class ClientService:
         db = get_db()
         db.execute('''
             UPDATE clients SET config_content = ?, server_addr = ?, local_port = ?, remote_port = ?,
-            updated_at = CURRENT_TIMESTAMP WHERE id = ?
+            config_dirty = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?
         ''', (config_content, server_addr, local_port, remote_port, client_id))
         db.commit()
+
+        # 同步写入配置文件到 /opt/frpc/frpc-{name}.toml
+        # 这样 Web 保存配置后文件 mtime 更新，运行中的容器会被标记「未重启」
+        ProcessService.deploy_config(client_id)
 
         ColorLogger.success('客户端 ' + client['name'] + ' 配置更新成功', 'Client')
         return True, {'message': '配置更新成功'}
