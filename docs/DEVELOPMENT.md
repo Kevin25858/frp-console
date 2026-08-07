@@ -286,11 +286,11 @@ curl -H "Authorization: Bearer <API_TOKEN>" \
 
 | 资源 | 命名规则 | 示例 |
 |---|---|---|
-| 容器名 | `FRPC-{id}` | `FRPC-1` |
-| 配置文件 | `frpc-{id}.toml` | `frpc-1.toml` |
-| 备份文件 | `frpc-{id}.toml.backup.{时间戳}` | `frpc-1.toml.backup.20260806_120000` |
+| 容器名 | `FRPC-{name}` | `FRPC-MC5173FRP-SQ1` |
+| 配置文件 | `frpc-{name}.toml` | `frpc-MC5173FRP-SQ1.toml` |
+| 备份文件 | `frpc-{name}.toml.backup.{时间戳}` | `frpc-MC5173FRP-SQ1.toml.backup.20260806_120000` |
 
-`{id}` 是数据库 `clients.id`，三者通过这个 ID 关联。
+`{name}` 是数据库 `clients.name`（保留容器原名称，统一加 `FRPC-` / `frpc-` 前缀）。
 
 对应代码：[app/services/process_service.py](../app/services/process_service.py) 的 `_container_name` / `_config_path`。
 
@@ -298,7 +298,7 @@ curl -H "Authorization: Bearer <API_TOKEN>" \
 
 `ProcessService.start(client_id)` 的步骤：
 
-1. **部署配置**：把数据库里的 `config_content` 写到 `/opt/frpc/frpc-{id}.toml`（覆盖前自动备份）
+1. **部署配置**：把数据库里的 `config_content` 写到 `/opt/frpc/frpc-{name}.toml`（覆盖前自动备份）
 2. **占位符校验**：检查配置里有没有 `your-server-address` 等未替换的占位符
 3. **解析镜像**：按优先级决定用哪个镜像（自定义 > frp_version > 自动获取最新版）
 4. **启动容器**：拉镜像 → 清理同名旧容器 → 创建新容器

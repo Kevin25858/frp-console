@@ -41,13 +41,13 @@ FRP Console 是一个轻量级的 FRP (Fast Reverse Proxy) 客户端配置管理
 └── Docker 引擎
     ├── frp-console 容器                      # Web 应用（Flask + React SPA），非 root
     │   └── 通过 /var/run/docker.sock 管理下方容器
-    └── FRPC-{id} 容器                        # 每个客户端一个，fatedier/frpc:<ver>
+    └── FRPC-{name} 容器                    # 每个客户端一个，fatedier/frpc:<ver>
         ├── --network host --restart always
-        ├── -v /opt/frpc/frpc-{id}.toml:/etc/frp/frpc.toml:ro
+        ├── -v /opt/frpc/frpc-{name}.toml:/etc/frp/frpc.toml:ro
         └── 健康检查: pgrep frpc
 ```
 
-frpc 以 `fatedier/frpc` 容器方式运行，Web 控制台通过 Docker SDK（挂载宿主机 `docker.sock`）管理容器生命周期。配置文件路径：`/opt/frpc/frpc-{id}.toml`
+frpc 以 `fatedier/frpc` 容器方式运行，Web 控制台通过 Docker SDK（挂载宿主机 `docker.sock`）管理容器生命周期。配置文件路径：`/opt/frpc/frpc-{name}.toml`
 
 ## 技术栈
 
@@ -136,10 +136,10 @@ docker compose up -d --build
 
 每个客户端支持独立的启动/停止/重启操作。点击「启动」时，Web 控制台会：
 
-1. 将配置写入 `/opt/frpc/frpc-{id}.toml`（覆盖前自动备份）
+1. 将配置写入 `/opt/frpc/frpc-{name}.toml`（覆盖前自动备份）
 2. 校验配置是否含未修改的占位符（如 `your-server-address`），有则拒绝启动
 3. 拉取 `fatedier/frpc:<version>` 镜像（版本留空时自动从 GitHub 获取最新）
-4. 创建并启动容器 `FRPC-{id}`（`--network host --restart always`，配置只读挂载）
+4. 创建并启动容器 `FRPC-{name}`（`--network host --restart always`，配置只读挂载）
 5. 回写解析后的镜像版本到数据库
 
 容器状态（running/stopped/error）实时显示在列表中。「查看日志」读取容器 stdout 日志。

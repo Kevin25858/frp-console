@@ -85,21 +85,30 @@ class ProcessService:
         return cls._client
 
     @staticmethod
+    def _get_name(client_id):
+        """根据客户端 ID 获取客户端 name，找不到时回退为 {id}"""
+        record = ProcessService._get_client_record(client_id)
+        if record and record['name']:
+            return record['name']
+        return str(client_id)
+
+    @staticmethod
     def _container_name(client_id):
         """
-        根据客户端 ID 生成容器名
+        根据客户端 name 生成容器名
 
-        命名规则：FRPC-{id}
-          - 大写表示这是用户可见的资源（区别于内部临时容器）
-          - 用 ID 关联数据库记录，确保唯一
-          - 和配置文件 frpc-{id}.toml 对应
+        命名规则：FRPC-{name}
+          - 大写前缀 FRPC- 标识这是本工具管理的 frpc 容器
+          - {name} 取自数据库 clients.name，与用户自定义名称一致
+          - 保留用户原有名称（如 MC5173FRP-SQ1 -> FRPC-MC5173FRP-SQ1）
+          - 防止重名导致冲突：name 唯一
         """
-        return 'FRPC-' + str(client_id)
+        return 'FRPC-' + ProcessService._get_name(client_id)
 
     @staticmethod
     def _config_path(client_id):
-        """根据客户端 ID 生成配置文件路径"""
-        return os.path.join(CONFIGS_DIR, 'frpc-' + str(client_id) + '.toml')
+        """根据客户端 name 生成配置文件路径（保留原名，加 frpc- 前缀）"""
+        return os.path.join(CONFIGS_DIR, 'frpc-' + ProcessService._get_name(client_id) + '.toml')
 
     @classmethod
     def _get_container(cls, client_id):
