@@ -180,6 +180,12 @@ export default function ClientListPage() {
                                             已停止
                                         </Badge>
                                     )}
+                                    {client.needs_restart && (
+                                        <Badge variant="outline" className="gap-1 ml-1 border-amber-400 text-amber-600 dark:text-amber-400" title="配置文件已修改，重启后生效">
+                                            <RotateCcw className="h-3 w-3" />
+                                            未重启
+                                        </Badge>
+                                    )}
                                 </TableCell>
                                 <TableCell>{client.local_port}</TableCell>
                                 <TableCell>{client.remote_port}</TableCell>
@@ -296,7 +302,8 @@ export default function ClientListPage() {
                     <Card key={client.id}>
                         <CardContent className="p-4">
                             <div className="flex items-center justify-between mb-3">
-                                <span className="font-medium">{client.name}</span>
+<span className="font-medium">{client.name}</span>
+                                <div className="flex items-center gap-1">
                                 {isClientLoading(client.id) ? (
                                     <Badge variant="secondary" className="gap-1">
                                         <Loader2 className="h-3 w-3 animate-spin" />
@@ -308,7 +315,7 @@ export default function ClientListPage() {
                                         运行中
                                     </Badge>
                                 ) : client.status === 'error' ? (
-                                    <Badge variant="destructive" className="gap-1">
+                                    <Badge variant="destructive" className="gap-1" title={client.error_msg}>
                                         <AlertCircle className="h-3 w-3" />
                                         异常
                                     </Badge>
@@ -318,6 +325,13 @@ export default function ClientListPage() {
                                         已停止
                                     </Badge>
                                 )}
+                                {client.needs_restart && (
+                                    <Badge variant="outline" className="gap-1 border-amber-400 text-amber-600 dark:text-amber-400" title="配置文件已修改，重启后生效">
+                                        <RotateCcw className="h-3 w-3" />
+                                        未重启
+                                    </Badge>
+                                )}
+                                </div>
                             </div>
                             <div className="text-sm text-muted-foreground space-y-1 mb-4">
                                 <div>本地端口: {client.local_port}</div>

@@ -18,6 +18,7 @@ export interface Client {
   user?: string; // 可选的用户名
   status: ClientStatus;
   error_msg?: string; // 异常时的最近错误信息
+  needs_restart?: boolean; // 配置修改过但未重启
   enabled: boolean;
   frp_version?: string; // frp 版本（留空表示自动取最新）
   image?: string; // 自定义镜像

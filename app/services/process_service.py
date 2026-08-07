@@ -28,6 +28,8 @@ frpc 以 fatedier/frpc 容器方式运行：
 import os
 import re
 import json
+import os
+from datetime import datetime, timezone
 import urllib.request
 from docker import from_env
 from docker.errors import NotFound, APIError
@@ -538,6 +540,34 @@ class ProcessService:
                 line = line.strip()
                 return line[:300]
         return 'frpc 运行异常，请查看日志'
+
+    @staticmethod
+    def needs_restart(client_id):
+        """
+        判断配置是否在容器启动后被修改过（需要重启才能生效）
+
+        原理：配置文件 mtime > 容器启动时间 且容器正在运行。
+        这样无论配置是通过 Web 控制台还是直接编辑文件修改的都能识别。
+        """
+        try:
+            container = ProcessService._get_container(client_id)
+            if not container:
+                return False
+            container.reload()
+            state = container.attrs.get('State', {})
+            if state.get('Status') != 'running':
+                return False
+            started_at = state.get('StartedAt', '')
+            if not started_at:
+                return False
+            # Docker 返回 ISO8601，如 2026-08-07T06:31:41.123456789Z
+            started_epoch = datetime.fromisoformat(started_at.replace('Z', '+00:00')).timestamp()
+            config_path = ProcessService._config_path(client_id)
+            if not os.path.exists(config_path):
+                return False
+            return os.path.getmtime(config_path) > started_epoch
+        except Exception:
+            return False
 
     @staticmethod
     def get_logs(client_id, lines=1000):

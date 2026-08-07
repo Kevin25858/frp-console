@@ -4,6 +4,7 @@ Pytest 配置和共享 fixture
 import pytest
 import sys
 import os
+from datetime import datetime, timezone
 
 # 添加项目根目录和 app 目录到 Python 路径
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -44,6 +45,7 @@ def mock_docker(monkeypatch, tmp_path):
                 'State': {
                     'Status': status,
                     'Health': {'Status': health} if health else {},
+                    'StartedAt': datetime.now(timezone.utc).isoformat(),
                 }
             }
             self.logs_data = b''

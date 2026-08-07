@@ -24,6 +24,7 @@ import {
     Server,
     Zap,
     XCircle,
+    RotateCcw,
 } from 'lucide-react';
 import type { Client } from "@/types";
 
@@ -274,8 +275,14 @@ export default function DashboardPage() {
                                                 {client.error_msg || '运行异常'}
                                             </span>
                                         ) : (
-                                            <span className="text-sm text-muted-foreground">
+                                            <span className="text-sm text-muted-foreground flex items-center gap-2">
                                                 {client.server_addr}:{client.remote_port}
+                                                {client.needs_restart && (
+                                                    <span className="inline-flex items-center gap-1 text-xs text-amber-500 dark:text-amber-400" title="配置文件已修改，重启后生效">
+                                                        <RotateCcw className="h-3 w-3" />
+                                                        未重启
+                                                    </span>
+                                                )}
                                             </span>
                                         )}
                                     </div>

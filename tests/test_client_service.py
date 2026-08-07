@@ -275,3 +275,41 @@ class TestProcessService:
         with test_app.app_context():
             logs = ProcessService.get_logs(99999)
             assert '日志暂无记录' in logs or 'docker logs' in logs
+
+    def test_needs_restart(self, test_app, mock_docker):
+        """测试配置修改后未重启的检测"""
+        import os
+        from datetime import datetime, timezone, timedelta
+
+        with test_app.app_context():
+            success, result = ClientService.create_client({
+                'name': 'needs-restart-test',
+                'config_content': VALID_TOML_CONFIG,
+                'frp_version': 'v0.61.1',
+            })
+            assert success
+            client_id = result['id']
+
+            # 未启动：不需要重启
+            assert ProcessService.needs_restart(client_id) is False
+
+            ok, msg = ProcessService.start(client_id)
+            assert ok, f"启动应成功: {msg}"
+            assert ProcessService.get_status(client_id) == 'running'
+
+            config_path = ProcessService._config_path(client_id)
+            assert os.path.exists(config_path)
+
+            # 启动后修改配置 → 需要重启
+            future = datetime.now(timezone.utc) + timedelta(minutes=5)
+            os.utime(config_path, (future.timestamp(), future.timestamp()))
+            assert ProcessService.needs_restart(client_id) is True
+
+            # 把 mtime 改回启动前 → 不需要重启
+            past = datetime.now(timezone.utc) - timedelta(minutes=5)
+            os.utime(config_path, (past.timestamp(), past.timestamp()))
+            assert ProcessService.needs_restart(client_id) is False
+
+            # 停止后：不算需要重启
+            ProcessService.stop(client_id)
+            assert ProcessService.needs_restart(client_id) is False
