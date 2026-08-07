@@ -2,7 +2,7 @@ import { useState, useEffect, ReactNode, useRef } from "react";
 import { EditorView, keymap, placeholder as cmPlaceholder } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
-import { StreamLanguage } from "@codemirror/language";
+import { StreamLanguage, type StringStream } from "@codemirror/language";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { useApi } from "@/hooks/useApi.ts";
 import { apiFetch } from "@/lib/api.ts";
@@ -29,7 +29,7 @@ import { FileText, Copy, Save, Check } from "lucide-react";
 
 // TOML 语法高亮
 const tomlLanguage = StreamLanguage.define({
-    token(stream: any) {
+    token(stream: StringStream) {
         if (stream.match(/^#.*/)) return "comment";
         if (stream.match(/^\[[\w.-]+\]/)) return "keyword";
         if (stream.match(/^\[\[[\w.-]+\]\]/)) return "keyword";
@@ -49,7 +49,6 @@ interface ViewConfigDialogProps {
     clientId: number;
     clientName: string;
     children?: ReactNode;
-    onClientUpdated?: () => void;
 }
 
 interface ConfigResponse {
@@ -111,6 +110,7 @@ function CodeEditor({
             view.destroy();
             viewRef.current = null;
         };
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅在挂载时初始化编辑器，value 由下方 useEffect 同步，placeholder 不变
     }, []);
 
     useEffect(() => {
@@ -132,7 +132,7 @@ function CodeEditor({
     );
 }
 
-export function ViewConfigDialog({ clientId, clientName, children, onClientUpdated }: ViewConfigDialogProps) {
+export function ViewConfigDialog({ clientId, clientName, children }: ViewConfigDialogProps) {
     const [open, setOpen] = useState(false);
     const [showConfirmDialog, setShowConfirmDialog] = useState(false);
     const [configContent, setConfigContent] = useState("");

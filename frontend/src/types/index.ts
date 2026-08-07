@@ -10,7 +10,6 @@ export type ClientStatus = 'running' | 'stopped' | 'error';
 export interface Client {
   id: number;
   name: string;
-  config_path: string;
   local_port: number;
   remote_port: number;
   server_addr: string;
@@ -19,10 +18,8 @@ export interface Client {
   user?: string; // 可选的用户名
   status: ClientStatus;
   enabled: boolean;
-  always_on: boolean;
-  traffic_in_cache: number;
-  traffic_out_cache: number;
-  connections_active_cache: number;
+  frp_version?: string; // frp 版本（留空表示自动取最新）
+  image?: string; // 自定义镜像
   created_at: string;
   updated_at: string;
 }
@@ -34,9 +31,11 @@ export interface CreateClientFormData {
   server_port?: number;
   token?: string;
   user?: string;
+  proxy_name?: string; // 代理名称（表单生成模式）
   local_port?: number;
   remote_port?: number;
-  always_on?: boolean;
+  frp_version?: string; // 可选，留空自动取最新
+  image?: string; // 可选，自定义镜像
   config_content?: string; // 粘贴配置模式
 }
 
@@ -44,30 +43,8 @@ export interface CreateClientFormData {
 export interface UpdateClientFormData {
   name?: string;
   enabled?: boolean;
-  always_on?: boolean;
-}
-
-// 告警类型
-export type AlertType = 'restart_limit' | 'always_on_failed' | 'offline';
-
-// 告警状态
-export interface Alert {
-  id: number;
-  client_id: number | null;
-  alert_type: AlertType;
-  message: string;
-  sent_to: string;
-  sent_at: string;
-  resolved: boolean;
-  client_name?: string; // 连接查询时包含
-}
-
-// 告警统计
-export interface AlertStats {
-  total: number;
-  unresolved: number;
-  resolved: number;
-  by_type: Record<AlertType, number>;
+  frp_version?: string;
+  image?: string;
 }
 
 // API 响应
@@ -94,37 +71,6 @@ export interface LoginFormData {
 // 修改密码表单数据
 export interface ChangePasswordFormData {
   old_password: string;
-  new_password: string;
-}
-
-// 用户角色类型
-export type UserRole = 'admin' | 'operator' | 'viewer';
-
-// 用户信息
-export interface User {
-  id: number;
-  username: string;
-  role: UserRole;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-// 创建用户表单数据
-export interface CreateUserFormData {
-  username: string;
-  password: string;
-  role: UserRole;
-}
-
-// 更新用户表单数据
-export interface UpdateUserFormData {
-  role?: UserRole;
-  is_active?: boolean;
-}
-
-// 重置密码表单数据
-export interface ResetPasswordFormData {
   new_password: string;
 }
 

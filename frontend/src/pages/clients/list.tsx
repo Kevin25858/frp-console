@@ -1,5 +1,4 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from "react";
-import { useTranslation } from "react-i18next";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useApi } from "@/hooks/useApi.ts";
 import { apiFetch } from "@/lib/api.ts";
 import { useToast } from "@/contexts/toast-context.tsx";
@@ -33,7 +32,6 @@ import { FileText, Trash2, Play, Square, RotateCcw, ScrollText, CheckCircle2, XC
 import type { Client } from "@/types";
 
 export default function ClientListPage() {
-    const { t } = useTranslation();
     const { data: clients, isLoading, error, fetchData: fetchClients } = useApi<Client[]>("/clients");
     const { success, error: toastError } = useToast();
     const [searchTerm, setSearchTerm] = useState("");
@@ -75,15 +73,16 @@ export default function ClientListPage() {
 
     // 客户端启动/停止/重启
     const handleClientAction = async (client: Client, action: 'start' | 'stop' | 'restart') => {
+        const actionLabel = { start: '启动', stop: '停止', restart: '重启' }[action];
         try {
             await apiFetch(`/clients/${client.id}/${action}`, {
                 method: 'POST',
             });
-            success(t(`clients.${action}Success`));
+            success(`${actionLabel}成功`);
             fetchClients();
         } catch (error) {
             console.error(`Failed to ${action} client ${client.id}:`, error);
-            toastError(t(`clients.${action}Error`));
+            toastError(`${actionLabel}失败`);
         }
     };
 
@@ -91,28 +90,28 @@ export default function ClientListPage() {
         try {
             await apiFetch(`/clients/${clientId}`, { method: 'DELETE' });
             fetchClients();
-            success(t('clients.deleteSuccess'));
+            success('删除成功');
         } catch (error) {
             console.error(`Failed to delete client ${clientId}:`, error);
-            toastError(t('clients.deleteError'));
+            toastError('删除失败');
         }
     };
 
     if (isLoading && !clients) {
-        return <div>{t('common.loading')}</div>
+        return <div>加载中...</div>
     }
 
     if (error) {
-        return <div>{t('clients.loadError')}: {error.message}</div>
+        return <div>加载失败: {error.message}</div>
     }
 
     return (
         <div>
             <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-bold">{t('clients.title')}</h2>
+                <h2 className="text-2xl font-bold">客户端列表</h2>
                 <div className="flex items-center space-x-2">
                     <Input
-                        placeholder={t('clients.searchPlaceholder')}
+                        placeholder="搜索客户端名称..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         className="w-64"
@@ -125,12 +124,12 @@ export default function ClientListPage() {
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            <TableHead>{t('clients.name')}</TableHead>
-                            <TableHead className="text-center">{t('common.status')}</TableHead>
-                            <TableHead>{t('clients.localPort')}</TableHead>
-                            <TableHead>{t('clients.remotePort')}</TableHead>
-                            <TableHead>{t('clients.serverAddress')}</TableHead>
-                            <TableHead className="text-right">{t('clients.actions')}</TableHead>
+                            <TableHead>名称</TableHead>
+                            <TableHead className="text-center">状态</TableHead>
+                            <TableHead>本地端口</TableHead>
+                            <TableHead>远程端口</TableHead>
+                            <TableHead>服务器地址</TableHead>
+                            <TableHead className="text-right">操作</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -141,17 +140,17 @@ export default function ClientListPage() {
                                     {client.status === 'running' ? (
                                         <Badge className="bg-green-500 hover:bg-green-600 gap-1">
                                             <CheckCircle2 className="h-3 w-3" />
-                                            {t('common.running')}
+                                            运行中
                                         </Badge>
                                     ) : client.status === 'error' ? (
                                         <Badge variant="destructive" className="gap-1">
                                             <AlertCircle className="h-3 w-3" />
-                                            {t('common.error')}
+                                            异常
                                         </Badge>
                                     ) : (
                                         <Badge variant="secondary" className="gap-1">
                                             <XCircle className="h-3 w-3" />
-                                            {t('common.stopped')}
+                                            已停止
                                         </Badge>
                                     )}
                                 </TableCell>
@@ -167,7 +166,7 @@ export default function ClientListPage() {
                                             className="h-8 w-8 text-green-600 hover:bg-green-50 hover:text-green-700 border-green-200"
                                             onClick={() => handleClientAction(client, 'start')}
                                             disabled={client.status === 'running'}
-                                            title={t('common.start')}
+                                            title="启动"
                                         >
                                             <Play className="h-4 w-4" />
                                         </Button>
@@ -177,7 +176,7 @@ export default function ClientListPage() {
                                             className="h-8 w-8 text-orange-600 hover:bg-orange-50 hover:text-orange-700 border-orange-200"
                                             onClick={() => handleClientAction(client, 'stop')}
                                             disabled={client.status !== 'running'}
-                                            title={t('common.stop')}
+                                            title="停止"
                                         >
                                             <Square className="h-4 w-4" />
                                         </Button>
@@ -186,20 +185,20 @@ export default function ClientListPage() {
                                             size="icon"
                                             className="h-8 w-8 text-blue-600 hover:bg-blue-50 hover:text-blue-700 border-blue-200"
                                             onClick={() => handleClientAction(client, 'restart')}
-                                            title={t('common.restart')}
+                                            title="重启"
                                         >
                                             <RotateCcw className="h-4 w-4" />
                                         </Button>
 
                                         <div className="w-px h-6 bg-border mx-1" />
 
-                                        <ViewConfigDialog clientId={client.id} clientName={client.name} onClientUpdated={fetchClients}>
+                                        <ViewConfigDialog clientId={client.id} clientName={client.name}>
                                             <Button
                                                 type="button"
                                                 variant="outline"
                                                 size="icon"
                                                 className="h-8 w-8"
-                                                title={t('clients.viewConfig')}
+                                                title="查看/编辑配置"
                                             >
                                                 <FileText className="h-4 w-4" />
                                             </Button>
@@ -210,7 +209,7 @@ export default function ClientListPage() {
                                                 variant="outline"
                                                 size="icon"
                                                 className="h-8 w-8"
-                                                title={t('clients.viewLogs')}
+                                                title="查看日志"
                                             >
                                                 <ScrollText className="h-4 w-4" />
                                             </Button>
@@ -225,25 +224,25 @@ export default function ClientListPage() {
                                                     variant="outline"
                                                     size="icon"
                                                     className="h-8 w-8 text-red-600 hover:bg-red-50 hover:text-red-700 border-red-200"
-                                                    title={t('clients.delete')}
+                                                    title="删除"
                                                 >
                                                     <Trash2 className="h-4 w-4" />
                                                 </Button>
                                             </AlertDialogTrigger>
                                             <AlertDialogContent>
                                                 <AlertDialogHeader>
-                                                    <AlertDialogTitle>{t('clients.deleteConfirmTitle')}</AlertDialogTitle>
+                                                    <AlertDialogTitle>确认删除</AlertDialogTitle>
                                                     <AlertDialogDescription>
-                                                        {t('clients.deleteConfirmDesc', { name: client.name })}
+                                                        确定要删除客户端「{client.name}」吗？此操作将同时移除容器与配置文件，且不可恢复。
                                                     </AlertDialogDescription>
                                                 </AlertDialogHeader>
                                                 <AlertDialogFooter>
-                                                    <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+                                                    <AlertDialogCancel>取消</AlertDialogCancel>
                                                     <AlertDialogAction
                                                         onClick={() => handleDelete(client.id)}
                                                         className="bg-red-600 hover:bg-red-700"
                                                     >
-                                                        {t('common.delete')}
+                                                        删除
                                                     </AlertDialogAction>
                                                 </AlertDialogFooter>
                                             </AlertDialogContent>
@@ -266,24 +265,24 @@ export default function ClientListPage() {
                                 {client.status === 'running' ? (
                                     <Badge className="bg-green-500 hover:bg-green-600 gap-1">
                                         <CheckCircle2 className="h-3 w-3" />
-                                        {t('common.running')}
+                                        运行中
                                     </Badge>
                                 ) : client.status === 'error' ? (
                                     <Badge variant="destructive" className="gap-1">
                                         <AlertCircle className="h-3 w-3" />
-                                        {t('common.error')}
+                                        异常
                                     </Badge>
                                 ) : (
                                     <Badge variant="secondary" className="gap-1">
                                         <XCircle className="h-3 w-3" />
-                                        {t('common.stopped')}
+                                        已停止
                                     </Badge>
                                 )}
                             </div>
                             <div className="text-sm text-muted-foreground space-y-1 mb-4">
-                                <div>{t('clients.localPort')}: {client.local_port}</div>
-                                <div>{t('clients.remotePort')}: {client.remote_port}</div>
-                                <div>{t('clients.serverAddress')}: {client.server_addr}</div>
+                                <div>本地端口: {client.local_port}</div>
+                                <div>远程端口: {client.remote_port}</div>
+                                <div>服务器地址: {client.server_addr}</div>
                             </div>
                             <div className="flex flex-wrap gap-2">
                                 {/* 移动端启动/停止/重启按钮 - 始终显示 */}
@@ -295,7 +294,7 @@ export default function ClientListPage() {
                                     disabled={client.status === 'running'}
                                 >
                                     <Play className="h-4 w-4 mr-1" />
-                                    {t('common.start')}
+                                    启动
                                 </Button>
                                 <Button
                                     variant="outline"
@@ -305,7 +304,7 @@ export default function ClientListPage() {
                                     disabled={client.status !== 'running'}
                                 >
                                     <Square className="h-4 w-4 mr-1" />
-                                    {t('common.stop')}
+                                    停止
                                 </Button>
                                 <Button
                                     variant="outline"
@@ -314,34 +313,34 @@ export default function ClientListPage() {
                                     onClick={() => handleClientAction(client, 'restart')}
                                 >
                                     <RotateCcw className="h-4 w-4 mr-1" />
-                                    {t('common.restart')}
+                                    重启
                                 </Button>
-                                <ViewConfigDialog clientId={client.id} clientName={client.name} onClientUpdated={fetchClients}>
+                                <ViewConfigDialog clientId={client.id} clientName={client.name}>
                                     <Button variant="outline" size="sm">
-                                        {t('clients.viewConfig')}
+                                        配置
                                     </Button>
                                 </ViewConfigDialog>
                                 <ViewLogsDialog clientId={client.id} clientName={client.name}>
                                     <Button variant="outline" size="sm">
-                                        {t('clients.viewLogs')}
+                                        日志
                                     </Button>
                                 </ViewLogsDialog>
                                 <AlertDialog>
                                     <AlertDialogTrigger asChild>
                                         <Button variant="destructive" size="sm">
-                                            {t('clients.delete')}
+                                            删除
                                         </Button>
                                     </AlertDialogTrigger>
                                     <AlertDialogContent>
                                         <AlertDialogHeader>
-                                            <AlertDialogTitle>{t('clients.deleteConfirmTitle')}</AlertDialogTitle>
+                                            <AlertDialogTitle>确认删除</AlertDialogTitle>
                                             <AlertDialogDescription>
-                                                {t('clients.deleteConfirmDesc', { name: client.name })}
+                                                确定要删除客户端「{client.name}」吗？此操作将同时移除容器与配置文件，且不可恢复。
                                             </AlertDialogDescription>
                                         </AlertDialogHeader>
                                         <AlertDialogFooter>
-                                            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
-                                            <AlertDialogAction onClick={() => handleDelete(client.id)}>{t('common.delete')}</AlertDialogAction>
+                                            <AlertDialogCancel>取消</AlertDialogCancel>
+                                            <AlertDialogAction onClick={() => handleDelete(client.id)}>删除</AlertDialogAction>
                                         </AlertDialogFooter>
                                     </AlertDialogContent>
                                 </AlertDialog>
