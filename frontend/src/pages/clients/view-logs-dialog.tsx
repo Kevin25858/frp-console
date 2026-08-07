@@ -61,10 +61,50 @@ export function ViewLogsDialog({ clientId, clientName, children }: ViewLogsDialo
     // 日志级别内联 SVG 图标（lucide 同款路径，避免 emoji）
     // 显式设置 width/height，防止 CSS 失效时按默认尺寸渲染成巨大图标
     const LEVEL_ICONS: Record<string, string> = {
-        error: '<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>',
-        warn: '<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>',
-        info: '<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
-        debug: '<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" fill="currentColor"/></svg>',
+        error: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>',
+        warn: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>',
+        info: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
+        debug: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" fill="currentColor"/></svg>',
+    };
+
+    // ANSI 颜色码 -> CSS 颜色
+    const ANSI_PALETTE: Record<number, string> = {
+        30: '#6e737d', 31: '#ff6b6b', 32: '#51cf66', 33: '#fcc419',
+        34: '#4dabf7', 35: '#d6336c', 36: '#22b8cf', 37: '#adb5bd',
+        90: '#8b949e', 91: '#ff8787', 92: '#69db7c', 93: '#ffd43b',
+        94: '#74c0fc', 95: '#e599f7', 96: '#66d9e8', 97: '#f1f3f5',
+    };
+
+    const escapeHtml = (s: string): string =>
+        s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    // 把一行的 ANSI 颜色码渲染成彩色 span，让日志带颜色
+    const colorizeLine = (line: string): string => {
+        const state = { color: '', bold: false };
+        // eslint-disable-next-line no-control-regex
+        const segments = line.split(/(\x1b\[[0-9;]*m)/);
+        let html = '';
+        for (const seg of segments) {
+            if (seg.startsWith('\x1b[')) {
+                const codes = seg.slice(2, -1).split(';').map(Number);
+                for (const c of codes) {
+                    if (c === 0) { state.bold = false; state.color = ''; }
+                    else if (c === 1) { state.bold = true; }
+                    else if (c === 22) { state.bold = false; }
+                    else if (c >= 30 && c <= 37) { state.color = ANSI_PALETTE[c]; }
+                    else if (c >= 90 && c <= 97) { state.color = ANSI_PALETTE[c]; }
+                }
+            } else if (seg) {
+                const text = escapeHtml(seg);
+                if (state.bold || state.color) {
+                    const style = `color:${state.color};${state.bold ? 'font-weight:bold;' : ''}`;
+                    html += `<span style="${style}">${text}</span>`;
+                } else {
+                    html += text;
+                }
+            }
+        }
+        return html;
     };
 
     const processLogs = (logContent: string): string => {
@@ -73,15 +113,8 @@ export function ViewLogsDialog({ clientId, clientName, children }: ViewLogsDialo
             // frpc 日志格式: date host frpc[pid]: timestamp [LEVEL] [file:line] message
             // systemd journal 格式: May 01 19:04:45 host frpc[pid]: ...
 
-            // 去掉 ANSI 颜色转义码（\x1b[1;34m 等），避免终端颜色码污染显示
-            // eslint-disable-next-line no-control-regex
-            const clean = line.replace(/\x1b\[[0-9;]*m/g, '');
-
-            // 转义 HTML
-            let html = clean
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;');
+            // 染色：ANSI 转义码渲染为彩色 span，同时转义 HTML
+            let html = colorizeLine(line);
 
             // 级别标记替换为带颜色的图标
             html = html.replace(
